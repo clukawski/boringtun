@@ -278,6 +278,8 @@ mod tests {
                     use_connected_socket: true,
                     #[cfg(target_os = "linux")]
                     use_multi_queue: true,
+                    peer_auth_script: None,
+                    listen_port: 0,
                 },
             )
         }
@@ -568,6 +570,8 @@ mod tests {
                 use_connected_socket: false,
                 #[cfg(target_os = "linux")]
                 use_multi_queue: true,
+                peer_auth_script: None,
+                listen_port: 0,
             },
         );
 
