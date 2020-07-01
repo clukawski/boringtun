@@ -191,7 +191,7 @@ struct ThreadData<T: Tun> {
 }
 
 impl<T: Tun, S: Sock> DeviceHandle<T, S> {
-    pub fn new(name: &str, config: DeviceConfig) -> Result<DeviceHandle<T, S>, Error> {
+    pub fn new(name: &str, config: DeviceConfig, pkey: Option<X25519SecretKey>) -> Result<DeviceHandle<T, S>, Error> {
         let n_threads = config.n_threads;
         let port = config.listen_port.clone();
         let mut wg_interface = Device::<T, S>::new(name, config)?;
