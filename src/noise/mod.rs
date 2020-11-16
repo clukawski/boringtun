@@ -105,6 +105,12 @@ const HANDSHAKE_RESP_SZ: usize = 92;
 const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
 
+// Size of arbitrary data to append to handshake response
+const HANDSHAKE_ARB_DATA_SZ: usize = 4;
+// Size of the handshake response + arbritrary data (used in packet
+// pattern matching in Tunn::parse_incoming_packet)
+const HANDSHAKE_RESP_ARB_SZ: usize = HANDSHAKE_RESP_SZ + HANDSHAKE_ARB_DATA_SZ;
+
 #[derive(Debug)]
 pub struct HandshakeInit<'a> {
     sender_idx: u32,
@@ -119,6 +125,7 @@ pub struct HandshakeResponse<'a> {
     pub receiver_idx: u32,
     unencrypted_ephemeral: &'a [u8],
     encrypted_nothing: &'a [u8],
+    arbitrary_payload: &'a [u8],
 }
 
 #[derive(Debug)]
@@ -288,8 +295,10 @@ impl Tunn {
         }
 
         // Checks the type, as well as the reserved zero fields
+        // HANDSHAKE_RESP_SZ has been replaced with HANDSHAKE_RESP_ARB_SZ,
+        // which is a composition of HADSHAKE_RESP_SZ and HANDSHAKE_ARB_DATA_SZ
+        // as match pattern syntax doesn't allow for composition
         let packet_type = u32::from_le_bytes(make_array(&src[0..4]));
-
         Ok(match (packet_type, src.len()) {
             (HANDSHAKE_INIT, HANDSHAKE_INIT_SZ) => Packet::HandshakeInit(HandshakeInit {
                 sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
@@ -297,11 +306,12 @@ impl Tunn {
                 encrypted_static: &src[40..88],
                 encrypted_timestamp: &src[88..116],
             }),
-            (HANDSHAKE_RESP, HANDSHAKE_RESP_SZ) => Packet::HandshakeResponse(HandshakeResponse {
+            (HANDSHAKE_RESP, HANDSHAKE_RESP_ARB_SZ) => Packet::HandshakeResponse(HandshakeResponse {
                 sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
                 receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),
                 unencrypted_ephemeral: &src[12..44],
                 encrypted_nothing: &src[44..60],
+                arbitrary_payload: &src[93..HANDSHAKE_RESP_ARB_SZ],
             }),
             (COOKIE_REPLY, COOKIE_REPLY_SZ) => Packet::PacketCookieReply(PacketCookieReply {
                 receiver_idx: u32::from_le_bytes(make_array(&src[4..8])),
