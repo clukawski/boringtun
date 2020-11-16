@@ -536,8 +536,18 @@ impl Handshake {
         local_index: u32,
         dst: &'a mut [u8],
     ) -> Result<&'a mut [u8], WireGuardError> {
-        let mac1_off = dst.len() - 32;
-        let mac2_off = dst.len() - 16;
+        // Handle adding 2 arbitrary bytes at the end of a handshake response
+        // We need to adjust the mac offsets when adding data after this so they're still in the right place
+        let mut arb_off = 0;
+        if dst.len() == super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ {
+            arb_off = super::HANDSHAKE_ARB_DATA_SZ;
+        }
+        // Define arbitrary data
+        let arb_data: [u8; 4] = [127, 0, 0, 1];
+
+        // Add fixed arb_off to mac offsets if set.
+        let mac1_off = dst.len() - (32+arb_off);
+        let mac2_off = dst.len() - (16+arb_off);
 
         // msg.mac1 = MAC(HASH(LABEL_MAC1 || responder.static_public), msg[0:offsetof(msg.mac1)])
         let msg_mac1: [u8; 16] = make_array(
@@ -556,6 +566,9 @@ impl Handshake {
         };
 
         dst[mac2_off..].copy_from_slice(&msg_mac2[..]);
+
+        // Append arbitrary message
+        dst[arb_off..].copy_from_slice(&arb_data[..]);
 
         self.cookies.index = local_index;
         self.cookies.last_mac1 = Some(msg_mac1);
@@ -645,7 +658,7 @@ impl Handshake {
         &mut self,
         dst: &'a mut [u8],
     ) -> Result<(&'a mut [u8], Session), WireGuardError> {
-        if dst.len() < super::HANDSHAKE_RESP_SZ {
+        if dst.len() < super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ {
             return Err(WireGuardError::DestinationBufferTooSmall);
         }
 
