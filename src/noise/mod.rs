@@ -103,7 +103,7 @@ pub struct HandshakeResponse<'a> {
     pub receiver_idx: u32,
     unencrypted_ephemeral: &'a [u8],
     encrypted_nothing: &'a [u8],
-    arbitrary_payload: &'a [u8],
+    pub arbitrary_payload: &'a [u8],
 }
 
 #[derive(Debug)]
