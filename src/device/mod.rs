@@ -40,6 +40,7 @@ use std::thread::JoinHandle;
 use std::process::Command;
 use std::str::FromStr;
 use std::str;
+use std::process::exit;
 
 use crate::allowed_ips::*;
 use crate::crypto::x25519::*;
@@ -103,6 +104,7 @@ pub struct DeviceConfig {
     pub use_multi_queue: bool,
     pub peer_auth_script: Option<String>,
     pub listen_port: u16,
+    pub tun_name: Option<String>
 }
 
 impl Default for DeviceConfig {
@@ -115,6 +117,7 @@ impl Default for DeviceConfig {
             use_multi_queue: true,
             peer_auth_script: None,
             listen_port: 0,
+            tun_name: None,
         }
     }
 }
@@ -635,6 +638,14 @@ impl Device {
                         Some(peer) => peer,
                     };
 
+                    let mut assigned_ip: [u8; 4] = [0,0,0,0];
+
+                    // Setup network if we have the ip from the handshake response
+                    if let Packet::HandshakeResponse(p) = &parsed_packet {
+                        assigned_ip.copy_from_slice(p.arbitrary_payload)
+                    }
+                    println!{"{:?}", assigned_ip};
+
                     // We found a peer, use it to decapsulate the message+
                     let mut flush = false; // Are there packets to send from the queue?
                     match peer
@@ -675,6 +686,9 @@ impl Device {
                         if let Ok(sock) = peer.connect_endpoint(d.listen_port, d.fwmark) {
                             d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
                                 .unwrap();
+                            if let Some(t) = &d.config.tun_name {
+                                setup_interface(&assigned_ip, &t);
+                            }
                         }
                     }
 
@@ -910,4 +924,49 @@ fn set_peer(
         preshared_key,
     );
 
+}
+
+fn setup_interface(ip: &[u8;4], tun_name: &str) {
+    //set the interface address if provided, and bring up the interface
+    // TODO: unset current iface ip
+    if let Err(e) = Command::new("/sbin/ip")
+        .arg("link")
+        .arg("set")
+        .arg(tun_name)
+        .arg("down")
+        .status() {
+            eprintln!("Failed to bring down interface: {:?}", e);
+            exit(1);
+        }
+    if let Err(e) = Command::new("/sbin/ip")
+        .arg("addr")
+        .arg("del")
+        .arg("need to know what this is") // TODO
+        .arg("dev")
+        .arg(tun_name)
+        .status() {
+            eprintln!("Failed to bring down interface: {:?}", e);
+            exit(1);
+        }
+    if ip.len() > 0 {
+        if let Err(e) = Command::new("/sbin/ip")
+            .arg("addr")
+            .arg("add")
+            .arg(format!("{}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]))
+            .arg("dev")
+            .arg(tun_name)
+            .status() {
+                eprintln!("Failed to add interface address: {:?}", e);
+                exit(1)
+            }
+        if let Err(e) = Command::new("/sbin/ip")
+            .arg("link")
+            .arg("set")
+            .arg(tun_name)
+            .arg("up")
+            .status() {
+                eprintln!("Failed to bring up interface: {:?}", e);
+                exit(1);
+            }
+    }
 }

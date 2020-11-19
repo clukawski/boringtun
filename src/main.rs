@@ -188,6 +188,7 @@ fn main() {
         use_multi_queue: !matches.is_present("disable-multi-queue"),
         peer_auth_script: Some(peer_auth.to_string()),
         listen_port: listen_port,
+        tun_name: Some(tun_name.to_string()),
     };
 
     let mut device_handle = match DeviceHandle::new(&tun_name, config, private_key) {
