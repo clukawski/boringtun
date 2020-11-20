@@ -739,7 +739,7 @@ impl Handshake {
         let temp2 = HMAC!(temp1, [0x01]);
         let temp3 = HMAC!(temp1, temp2, [0x02]);
 
-        let dst = self.append_mac1_and_mac2(local_index, &mut dst[..super::HANDSHAKE_RESP_SZ])?;
+        let dst = self.append_mac1_and_mac2(local_index, &mut dst[..super::HANDSHAKE_RESP_SZ+super::HANDSHAKE_ARB_DATA_SZ])?;
 
         Ok((dst, Session::new(local_index, peer_index, temp2, temp3)))
     }
