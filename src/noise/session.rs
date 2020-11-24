@@ -159,6 +159,7 @@ impl Session {
         peer_index: u32,
         receiving_key: [u8; 32],
         sending_key: [u8; 32],
+        handshake_ip: [u8; 4],
     ) -> Session {
         Session {
             receiving_index: local_index,
@@ -175,6 +176,7 @@ impl Session {
             sender: ChaCha20Poly1305::new_aead(&sending_key[..]),
             sending_key_counter: AtomicUsize::new(0),
             receiving_key_counter: Mutex::new(Default::default()),
+            handshake_ip: handshake_ip,
         }
     }
 

@@ -475,6 +475,8 @@ impl Handshake {
         hash = HASH!(hash, temp2);
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         OPEN!([], key, 0, packet.encrypted_nothing, hash)?;
+        let mut assigned_ip: [u8; 4] = [0, 0, 0, 0];
+        OPEN!(assigned_ip, key, 0, packet.arbitrary_payload, hash)?;
 
         // responder.hash = HASH(responder.hash || msg.encrypted_nothing)
         // hash = HASH!(hash, buf[ENC_NOTHING_OFF..ENC_NOTHING_OFF + ENC_NOTHING_SZ]);
@@ -499,7 +501,7 @@ impl Handshake {
         } else {
             self.state = HandshakeState::None;
         }
-        Ok(Session::new(local_index, peer_index, temp3, temp2))
+        Ok(Session::new(local_index, peer_index, temp3, temp2, assigned_ip))
     }
 
     pub(super) fn receive_cookie_reply(
@@ -536,14 +538,12 @@ impl Handshake {
         local_index: u32,
         dst: &'a mut [u8],
     ) -> Result<&'a mut [u8], WireGuardError> {
-        // Handle adding 2 arbitrary bytes at the end of a handshake response
+        // Handle adding 4 arbitrary bytes at the end of a handshake response
         // We need to adjust the mac offsets when adding data after this so they're still in the right place
         let mut arb_off = 0;
         if dst.len() == super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ {
             arb_off = super::HANDSHAKE_ARB_DATA_SZ;
         }
-        // Define arbitrary data
-        let arb_data: [u8; 4] = [127, 0, 0, 1];
 
         // Add fixed arb_off to mac offsets if set.
         let mac1_off = dst.len() - (32+arb_off);
@@ -566,9 +566,6 @@ impl Handshake {
         };
 
         dst[mac2_off..].copy_from_slice(&msg_mac2[..]);
-
-        // Append arbitrary message
-        dst[arb_off..].copy_from_slice(&arb_data[..]);
 
         self.cookies.index = local_index;
         self.cookies.last_mac1 = Some(msg_mac1);
@@ -679,7 +676,9 @@ impl Handshake {
         let (sender_index, rest) = rest.split_at_mut(4);
         let (receiver_index, rest) = rest.split_at_mut(4);
         let (unencrypted_ephemeral, rest) = rest.split_at_mut(32);
-        let (mut encrypted_nothing, _) = rest.split_at_mut(16);
+        let (mut encrypted_nothing, rest) = rest.split_at_mut(16);
+        let (_, rest) = rest.split_at_mut(32);
+        let (mut arbitrary_data, _) = rest.split_at_mut(super::HANDSHAKE_ARB_DATA_SZ);
 
         // responder.ephemeral_private = DH_GENERATE()
         let ephemeral_private = X25519SecretKey::new();
@@ -727,6 +726,8 @@ impl Handshake {
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
+        // Seal arbitrary data
+        SEAL!(arbitrary_data, key, 0, [127,0,0,1], hash);
         // Derive keys
         // temp1 = HMAC(initiator.chaining_key, [empty])
         // temp2 = HMAC(temp1, 0x1)
@@ -741,6 +742,6 @@ impl Handshake {
 
         let dst = self.append_mac1_and_mac2(local_index, &mut dst[..super::HANDSHAKE_RESP_SZ+super::HANDSHAKE_ARB_DATA_SZ])?;
 
-        Ok((dst, Session::new(local_index, peer_index, temp2, temp3)))
+        Ok((dst, Session::new(local_index, peer_index, temp2, temp3, [0,0,0,0])))
     }
 }
