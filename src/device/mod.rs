@@ -141,7 +141,7 @@ pub struct DeviceConfig {
     pub use_multi_queue: bool,
     pub peer_auth_script: Option<String>,
     pub listen_port: u16,
-    pub tun_name: Option<String>
+    pub tun_name: Option<String>,
 }
 
 impl Default for DeviceConfig {
@@ -659,12 +659,10 @@ impl<T: Tun, S: Sock> Device<T, S> {
                         Some(peer) => peer,
                     };
 
-                    let mut assigned_ip: [u8; 4] = [0,0,0,0];
                     let mut handshake_resp = false;
 
                     // Setup network if we have the ip from the handshake response
-                    if let Packet::HandshakeResponse(p) = &parsed_packet {
-                        assigned_ip.copy_from_slice(p.arbitrary_payload);
+                    if let Packet::HandshakeResponse(_) = &parsed_packet {
                         handshake_resp = true;
                     }
 
@@ -709,9 +707,11 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
                                 .unwrap();
                             // Setup network if we have the ip from the handshake response
-                            println!{"{:?}", assigned_ip};
                             if let Some(t) = &d.config.tun_name {
                                 if handshake_resp {
+                                    let tun_aip = peer.tunnel.assigned_ip.lock();
+                                    let assigned_ip = tun_aip.get();
+                                    println! {"{:?}", assigned_ip};
                                     setup_interface(&assigned_ip, &t);
                                 }
                             }
@@ -889,10 +889,10 @@ fn check_auth (hh: &handshake::HalfHandshake, d: &mut LockReadGuard<Device>) {
 
     // call auth script: this MUST return ip in CIDR format x.x.x.x/32
     let external_auth = Command::new(auth_script)
-                        .arg("wg")
-                        .arg("--pubkey")
-                        .arg(base64::encode(pub_key.as_bytes()))
-                        .output();
+        .arg("wg")
+        .arg("--pubkey")
+        .arg(base64::encode(pub_key.as_bytes()))
+        .output();
 
     // response should contain the allowed ip + preshared-key seperated by new lines
     if let Ok(out) = external_auth {
@@ -908,24 +908,23 @@ fn check_auth (hh: &handshake::HalfHandshake, d: &mut LockReadGuard<Device>) {
                         match ip {
                             Some(allowed_ip) => {
                                 set_peer(
-                                    &mut device, 
-                                    X25519PublicKey::from(&hh.peer_static_public[..]), 
+                                    &mut device,
+                                    X25519PublicKey::from(&hh.peer_static_public[..]),
                                     vec![allowed_ip],
                                     psk,
-                                );   
-                            },
-                            None => return
+                                );
+                            }
+                            None => return,
                         }
-                    },
+                    }
                     Err(e) => {
                         eprintln!("could not parse psk: {:?}", e);
-                        return
-                    },
+                        return;
+                    }
                 }
             }
         }
     }
-    
 }
 
 fn set_peer(
@@ -960,20 +959,22 @@ fn setup_interface(ip: &[u8], tun_name: &str) {
         .arg("set")
         .arg(tun_name)
         .arg("down")
-        .status() {
-            eprintln!("Failed to bring down interface: {:?}", e);
-            exit(1);
-        }
+        .status()
+    {
+        eprintln!("Failed to bring down interface: {:?}", e);
+        exit(1);
+    }
     if let Err(e) = Command::new("/sbin/ip")
         .arg("addr")
         .arg("del")
         .arg("need to know what this is") // TODO
         .arg("dev")
         .arg(tun_name)
-        .status() {
-            eprintln!("Failed to bring down interface: {:?}", e);
-            exit(1);
-        }
+        .status()
+    {
+        eprintln!("Failed to bring down interface: {:?}", e);
+        exit(1);
+    }
     if ip.len() > 0 {
         if let Err(e) = Command::new("/sbin/ip")
             .arg("addr")
@@ -981,18 +982,20 @@ fn setup_interface(ip: &[u8], tun_name: &str) {
             .arg(format!("{}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]))
             .arg("dev")
             .arg(tun_name)
-            .status() {
-                eprintln!("Failed to add interface address: {:?}", e);
-                exit(1)
-            }
+            .status()
+        {
+            eprintln!("Failed to add interface address: {:?}", e);
+            exit(1)
+        }
         if let Err(e) = Command::new("/sbin/ip")
             .arg("link")
             .arg("set")
             .arg(tun_name)
             .arg("up")
-            .status() {
-                eprintln!("Failed to bring up interface: {:?}", e);
-                exit(1);
-            }
+            .status()
+        {
+            eprintln!("Failed to bring up interface: {:?}", e);
+            exit(1);
+        }
     }
 }
