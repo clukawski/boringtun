@@ -639,12 +639,13 @@ impl Device {
                     };
 
                     let mut assigned_ip: [u8; 4] = [0,0,0,0];
+                    let mut handshake_resp = false;
 
                     // Setup network if we have the ip from the handshake response
                     if let Packet::HandshakeResponse(p) = &parsed_packet {
-                        assigned_ip.copy_from_slice(p.arbitrary_payload)
+                        assigned_ip.copy_from_slice(p.arbitrary_payload);
+                        handshake_resp = true;
                     }
-                    println!{"{:?}", assigned_ip};
 
                     // We found a peer, use it to decapsulate the message+
                     let mut flush = false; // Are there packets to send from the queue?
@@ -686,8 +687,12 @@ impl Device {
                         if let Ok(sock) = peer.connect_endpoint(d.listen_port, d.fwmark) {
                             d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
                                 .unwrap();
+                            // Setup network if we have the ip from the handshake response
+                            println!{"{:?}", assigned_ip};
                             if let Some(t) = &d.config.tun_name {
-                                setup_interface(&assigned_ip, &t);
+                                if handshake_resp {
+                                    setup_interface(&assigned_ip, &t);
+                                }
                             }
                         }
                     }
@@ -926,7 +931,7 @@ fn set_peer(
 
 }
 
-fn setup_interface(ip: &[u8;4], tun_name: &str) {
+fn setup_interface(ip: &[u8], tun_name: &str) {
     //set the interface address if provided, and bring up the interface
     // TODO: unset current iface ip
     if let Err(e) = Command::new("/sbin/ip")

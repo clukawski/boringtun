@@ -87,6 +87,7 @@ pub struct Tunn {
     timers: timers::Timers, // Keeps tabs on the expiring timers
     tx_bytes: AtomicUsize,
     rx_bytes: AtomicUsize,
+    assigned_ip: [u8; 4],
 
     rate_limiter: Arc<RateLimiter>,
 
@@ -188,6 +189,7 @@ impl Tunn {
             rate_limiter: rate_limiter.unwrap_or_else(|| {
                 Arc::new(RateLimiter::new(&static_public, PEER_HANDSHAKE_RATE_LIMIT))
             }),
+            assigned_ip: [0,0,0,0],
         };
 
         Ok(Box::new(tunn))
@@ -275,7 +277,7 @@ impl Tunn {
     }
 
     pub(crate) fn handle_verified_packet<'a>(
-        &self,
+        &mut self,
         packet: Packet,
         dst: &'a mut [u8],
     ) -> TunnResult<'a> {
@@ -352,7 +354,7 @@ impl Tunn {
     }
 
     fn handle_handshake_response<'a>(
-        &self,
+        &mut self,
         p: HandshakeResponse,
         dst: &'a mut [u8],
     ) -> Result<TunnResult<'a>, WireGuardError> {
@@ -369,6 +371,7 @@ impl Tunn {
         *self.sessions[index].write() = Some(session);
         // The new session becomes the currently used session
         self.current.store(index, Ordering::SeqCst);
+        self.assigned_ip = [127, 0, 0, 1];
 
         self.timer_tick(TimerName::TimeLastPacketReceived);
         self.timer_tick_session_established(true, index); // New session established, we are the initiator
