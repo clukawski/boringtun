@@ -170,7 +170,7 @@ fn api_get<T: Tun, S: Sock>(writer: &mut BufWriter<&UnixStream>, d: &Device<T, S
 
 // return json output
 #[allow(unused_must_use)]
-fn api_get_json(writer: &mut BufWriter<&UnixStream>, d: &Device) -> i32 {
+fn api_get_json<T: Tun, S: Sock> (writer: &mut BufWriter<&UnixStream>, d: &Device<T, S>) -> i32 {
     
     let mut data = json::JsonValue::new_array();
 

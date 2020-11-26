@@ -198,6 +198,10 @@ impl<T: Tun, S: Sock> DeviceHandle<T, S> {
         let n_threads = config.n_threads;
         let port = config.listen_port.clone();
         let mut wg_interface = Device::<T, S>::new(name, config)?;
+        // set private key if provided
+        if let Some(private_key) = pkey {
+            wg_interface.set_key(private_key);
+        }
         wg_interface.open_listen_socket(port)?; // Start listening on a random port
 
         let interface_lock = Arc::new(Lock::new(wg_interface));
@@ -859,76 +863,71 @@ impl<T: Tun, S: Sock> Device<T, S> {
 }
 
 // check external auth for the provided public key, if it exists, create a new peer and return it
-fn check_auth (hh: &handshake::HalfHandshake, d: &mut LockReadGuard<Device>) {
+fn check_auth<T: Tun, S: Sock> (hh: &handshake::HalfHandshake, d: &mut LockReadGuard<Device<T, S>>) {
     
-    // // We need to get a write lock on the device first
-    let mut write_mark = match d.mark_want_write() {
-        None => {
-            eprintln!("check_auth could not get device lock");
-            return
-        },
-        Some(lock) => lock,
-    };
+    d.try_writeable(
+        |device| device.trigger_yield(),
+        |mut device| {
+            device.cancel_yield();
 
-    write_mark.trigger_yield();
-    let mut device = write_mark.write();
-    device.cancel_yield();
+            // check if we have an auth script to try
+            let auth_script = match &device.config.peer_auth_script {
+                Some(auth_script) => auth_script,
+                None => return
+            };
 
-    // check if we have an auth script to try
-    let auth_script = match &device.config.peer_auth_script {
-        Some(auth_script) => auth_script,
-        None => return
-    };
+            let pub_key = &X25519PublicKey::from(&hh.peer_static_public[..]);
+            
+            // check if we have a peer already and return
+            if device.peers.get(pub_key).is_some() {
+                return;
+            }
 
-    let pub_key = &X25519PublicKey::from(&hh.peer_static_public[..]);
-    
-    // check if we have a peer already and return
-    if device.peers.get(pub_key).is_some() {
-        return;
-    }
+            // call auth script: this MUST return ip in CIDR format x.x.x.x/32
+            let external_auth = Command::new(auth_script)
+                .arg("wg")
+                .arg("--pubkey")
+                .arg(base64::encode(pub_key.as_bytes()))
+                .output();
 
-    // call auth script: this MUST return ip in CIDR format x.x.x.x/32
-    let external_auth = Command::new(auth_script)
-        .arg("wg")
-        .arg("--pubkey")
-        .arg(base64::encode(pub_key.as_bytes()))
-        .output();
-
-    // response should contain the allowed ip + preshared-key seperated by new lines
-    if let Ok(out) = external_auth {
-        let auth_data = String::from_utf8(out.stdout).unwrap_or(String::from(""));
-        if auth_data.len() > 0 {
-            let auth_parts: Vec<&str> = auth_data.split("\n").collect();
-            if auth_parts.len() >= 2 {
-                let ip = AllowedIP::from_str(&auth_parts[0]).ok();
-                // parse the pre shared key
-                match auth_parts[1].parse::<X25519PublicKey>() {
-                    Ok(preshared_key) => {
-                        let psk = Some(make_array(preshared_key.as_bytes()));
-                        match ip {
-                            Some(allowed_ip) => {
-                                set_peer(
-                                    &mut device,
-                                    X25519PublicKey::from(&hh.peer_static_public[..]),
-                                    vec![allowed_ip],
-                                    psk,
-                                );
+            // response should contain the allowed ip + preshared-key seperated by new lines
+            if let Ok(out) = external_auth {
+                let auth_data = String::from_utf8(out.stdout).unwrap_or(String::from(""));
+                if auth_data.len() > 0 {
+                    let auth_parts: Vec<&str> = auth_data.split("\n").collect();
+                    if auth_parts.len() >= 2 {
+                        let ip = AllowedIP::from_str(&auth_parts[0]).ok();
+                        // parse the pre shared key
+                        match auth_parts[1].parse::<X25519PublicKey>() {
+                            Ok(preshared_key) => {
+                                let psk = Some(make_array(preshared_key.as_bytes()));
+                                match ip {
+                                    Some(allowed_ip) => {
+                                        set_peer(
+                                            &mut device,
+                                            X25519PublicKey::from(&hh.peer_static_public[..]),
+                                            vec![allowed_ip],
+                                            psk,
+                                        );
+                                    }
+                                    None => return,
+                                }
                             }
-                            None => return,
+                            Err(e) => {
+                                eprintln!("could not parse psk: {:?}", e);
+                                return;
+                            }
                         }
-                    }
-                    Err(e) => {
-                        eprintln!("could not parse psk: {:?}", e);
-                        return;
                     }
                 }
             }
         }
-    }
+    )
+    .unwrap()
 }
 
-fn set_peer(
-    d: &mut Device,
+fn set_peer<T: Tun, S: Sock>(
+    d: &mut Device<T, S>,
     pub_key: X25519PublicKey,
     allowed_ips: Vec<AllowedIP>,
     preshared_key: Option<[u8; 32]>,

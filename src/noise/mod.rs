@@ -67,7 +67,7 @@ pub struct Tunn {
     timers: timers::Timers, // Keeps tabs on the expiring timers
     tx_bytes: AtomicUsize,
     rx_bytes: AtomicUsize,
-    pub assigned_ip: spin::Mutex<Cell<[u8; 4]>>,
+    pub assigned_ip: Mutex<Cell<[u8; 4]>>,
 
     rate_limiter: Arc<RateLimiter>,
 
@@ -167,7 +167,7 @@ impl Tunn {
             rate_limiter: rate_limiter.unwrap_or_else(|| {
                 Arc::new(RateLimiter::new(&static_public, PEER_HANDSHAKE_RATE_LIMIT))
             }),
-            assigned_ip: spin::Mutex::new(Cell::new([0, 0, 0, 0])),
+            assigned_ip: Mutex::new(Cell::new([0, 0, 0, 0])),
         };
 
         Ok(Box::new(tunn))
