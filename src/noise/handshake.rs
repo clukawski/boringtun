@@ -726,7 +726,7 @@ impl Handshake {
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
-        // Seal arbitrary data
+        // Seal arbitrary data (currenly IP)
         SEAL!(arbitrary_data, key, 0, [127,0,0,1], hash);
         // Derive keys
         // temp1 = HMAC(initiator.chaining_key, [empty])
