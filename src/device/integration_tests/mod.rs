@@ -280,7 +280,7 @@ mod tests {
                     use_multi_queue: true,
                     peer_auth_script: None,
                     listen_port: 0,
-                    // tun_name: TODO
+                    tun_name: None,
                 },
             )
         }
@@ -573,6 +573,7 @@ mod tests {
                 use_multi_queue: true,
                 peer_auth_script: None,
                 listen_port: 0,
+                tun_name: None,
             },
         );
 
@@ -733,6 +734,7 @@ mod tests {
                 use_connected_socket: false,
                 #[cfg(target_os = "linux")]
                 use_multi_queue: true,
+                tun_name: None,
             },
         );
 
