@@ -164,8 +164,9 @@ impl RateLimiter {
         if let Packet::HandshakeInit(HandshakeInit { sender_idx, .. })
         | Packet::HandshakeResponse(HandshakeResponse { sender_idx, .. }) = packet
         {
-            let (msg, macs) = src.split_at(src.len() - 32);
-            let (mac1, mac2) = macs.split_at(16);
+            let (msg, macs) = src.split_at(src.len() - 32+4);
+            let (mac1, mac2_and_arb) = macs.split_at(16);
+            let (mac2, _) = mac2_and_arb.split_at(16);
 
             let computed_mac1 = Blake2s::new_mac(&self.mac1_key).hash(msg).finalize();
             constant_time_mac_check(&computed_mac1[..16], mac1).map_err(TunnResult::Err)?;
