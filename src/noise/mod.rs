@@ -86,7 +86,7 @@ const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
 
 // Size of arbitrary data to append to handshake response
-const HANDSHAKE_ARB_DATA_SZ: usize = 4;
+const HANDSHAKE_ARB_DATA_SZ: usize = 20;
 // Size of the handshake response + arbritrary data (used in packet
 // pattern matching in Tunn::parse_incoming_packet)
 const HANDSHAKE_RESP_ARB_SZ: usize = HANDSHAKE_RESP_SZ + HANDSHAKE_ARB_DATA_SZ;
