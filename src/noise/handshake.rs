@@ -478,7 +478,7 @@ impl Handshake {
         let mut assigned_ip: [u8; 4] = [0, 0, 0, 0];
 
         // Get assigned ip
-        OPEN!(assigned_ip, key, 0, packet.arbitrary_payload, hash)?;
+        // OPEN!(assigned_ip, key, 0, packet.arbitrary_payload, hash)?;
         assigned_ip.copy_from_slice(&packet.arbitrary_payload);
 
         // responder.hash = HASH(responder.hash || msg.encrypted_nothing)
