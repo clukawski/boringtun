@@ -291,7 +291,7 @@ impl Tunn {
                     receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),
                     unencrypted_ephemeral: &src[12..44],
                     encrypted_nothing: &src[44..60],
-                    arbitrary_payload: &src[93..HANDSHAKE_RESP_ARB_SZ],
+                    arbitrary_payload: &src[92..HANDSHAKE_RESP_ARB_SZ],
                 })
             }
             (COOKIE_REPLY, COOKIE_REPLY_SZ) => Packet::PacketCookieReply(PacketCookieReply {
