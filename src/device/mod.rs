@@ -28,6 +28,7 @@ pub mod tun;
 #[path = "udp_unix.rs"]
 pub mod udp;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::convert::From;
 use std::io;
@@ -142,6 +143,7 @@ pub struct DeviceConfig {
     pub peer_auth_script: Option<String>,
     pub listen_port: u16,
     pub tun_name: Option<String>,
+    pub ip_list: Option<Arc<Mutex<Vec<[u8; 4]>>>>,
 }
 
 impl Default for DeviceConfig {
@@ -155,6 +157,7 @@ impl Default for DeviceConfig {
             peer_auth_script: None,
             listen_port: 0,
             tun_name: None,
+            ip_list: None,
         }
     }
 }
@@ -352,6 +355,12 @@ impl<T: Tun, S: Sock> Device<T, S> {
             .as_ref()
             .expect("Private key must be set first");
 
+        let some_ip_list = self
+            .config
+            .ip_list
+            .as_ref()
+            .expect("Peer IP list not configured.")
+            .clone();
         let mut tunn = Tunn::new(
             Arc::clone(&device_key_pair.0),
             Arc::clone(&pub_key),
@@ -359,6 +368,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             keepalive,
             next_index,
             None,
+            Some(some_ip_list),
         )
         .unwrap();
 

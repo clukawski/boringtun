@@ -8,8 +8,10 @@ use crate::crypto::x25519::{X25519PublicKey, X25519SecretKey};
 use crate::noise::errors::WireGuardError;
 use crate::noise::make_array;
 use crate::noise::session::Session;
+use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
+use std::vec::Vec;
 
 // static CONSTRUCTION: &'static [u8] = b"Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s";
 // static IDENTIFIER: &'static [u8] = b"WireGuard v1 zx2c4 Jason@zx2c4.com";
@@ -170,6 +172,7 @@ pub struct Handshake {
     last_handshake_timestamp: Tai64N, // The timestamp of the last handshake we received
     stamper: TimeStamper,             // TODO: make TimeStamper a singleton
     pub(super) last_rtt: Option<u32>,
+    pub ip_list: Arc<Mutex<Vec<[u8; 4]>>>,
 }
 
 #[derive(Default)]
@@ -271,6 +274,7 @@ impl Handshake {
         peer_static_public: Arc<X25519PublicKey>,
         global_idx: u32,
         preshared_key: Option<[u8; 32]>,
+        ip_list: Arc<Mutex<Vec<[u8; 4]>>>,
     ) -> Result<Handshake, WireGuardError> {
         let params = NoiseParams::new(
             static_private,
@@ -288,6 +292,7 @@ impl Handshake {
             stamper: TimeStamper::new(),
             cookies: Default::default(),
             last_rtt: None,
+            ip_list: ip_list,
         })
     }
 
@@ -501,7 +506,13 @@ impl Handshake {
         } else {
             self.state = HandshakeState::None;
         }
-        Ok(Session::new(local_index, peer_index, temp3, temp2, assigned_ip))
+        Ok(Session::new(
+            local_index,
+            peer_index,
+            temp3,
+            temp2,
+            assigned_ip,
+        ))
     }
 
     pub(super) fn receive_cookie_reply(
@@ -546,8 +557,8 @@ impl Handshake {
         }
 
         // Add fixed arb_off to mac offsets if set.
-        let mac1_off = dst.len() - (32+arb_off);
-        let mac2_off = dst.len() - (16+arb_off);
+        let mac1_off = dst.len() - (32 + arb_off);
+        let mac2_off = dst.len() - (16 + arb_off);
 
         // msg.mac1 = MAC(HASH(LABEL_MAC1 || responder.static_public), msg[0:offsetof(msg.mac1)])
         let msg_mac1: [u8; 16] = make_array(
@@ -727,7 +738,7 @@ impl Handshake {
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
         // Seal arbitrary data (currenly IP)
-        SEAL!(arbitrary_data, key, 0, [127,0,0,1], hash);
+        SEAL!(arbitrary_data, key, 0, [127, 0, 0, 1], hash);
         // Derive keys
         // temp1 = HMAC(initiator.chaining_key, [empty])
         // temp2 = HMAC(temp1, 0x1)
@@ -740,8 +751,14 @@ impl Handshake {
         let temp2 = HMAC!(temp1, [0x01]);
         let temp3 = HMAC!(temp1, temp2, [0x02]);
 
-        let dst = self.append_mac1_and_mac2(local_index, &mut dst[..super::HANDSHAKE_RESP_SZ+super::HANDSHAKE_ARB_DATA_SZ])?;
+        let dst = self.append_mac1_and_mac2(
+            local_index,
+            &mut dst[..super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ],
+        )?;
 
-        Ok((dst, Session::new(local_index, peer_index, temp2, temp3, [0,0,0,0])))
+        Ok((
+            dst,
+            Session::new(local_index, peer_index, temp2, temp3, [0, 0, 0, 0]),
+        ))
     }
 }

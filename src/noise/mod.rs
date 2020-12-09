@@ -140,9 +140,11 @@ impl Tunn {
         persistent_keepalive: Option<u16>,
         index: u32,
         rate_limiter: Option<Arc<RateLimiter>>,
+        ip_list: Option<Arc<Mutex<Vec<[u8; 4]>>>>,
     ) -> Result<Box<Tunn>, &'static str> {
         let static_public = Arc::new(static_private.public_key());
 
+        let some_ip_list = ip_list.as_ref().unwrap();
         let tunn = Tunn {
             handshake: Mutex::new(
                 Handshake::new(
@@ -151,6 +153,7 @@ impl Tunn {
                     peer_static_public,
                     index << 8,
                     preshared_key,
+                    some_ip_list.clone(),
                 )
                 .map_err(|_| "Invalid parameters")?,
             ),

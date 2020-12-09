@@ -14,12 +14,14 @@ use crate::device::drop_privileges::*;
 use crate::device::*;
 use clap::{value_t, App, Arg};
 use daemonize::Daemonize;
+use parking_lot::Mutex;
 use slog::{error, info, o, Drain, Logger};
 use std::fs::File;
 use std::fs;
 use std::os::unix::net::UnixDatagram;
 use std::process::exit;
 use std::process::Command;
+use std::sync::Arc;
 
 fn check_tun_name(_v: String) -> Result<(), String> {
     #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -187,6 +189,7 @@ fn main() {
         logger = Logger::root(drain, o!());
     }
 
+    let ip_list = Some(Arc::new(Mutex::new(vec![[127, 0, 0, 1]])));
     let config = DeviceConfig {
         n_threads,
         logger: logger.clone(),
@@ -196,6 +199,7 @@ fn main() {
         peer_auth_script: Some(peer_auth.to_string()),
         listen_port: listen_port,
         tun_name: Some(tun_name.to_string()),
+        ip_list: ip_list,
     };
 
     let mut device_handle: DeviceHandle = match DeviceHandle::new(&tun_name, config, private_key) {
