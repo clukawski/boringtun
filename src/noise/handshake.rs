@@ -481,7 +481,10 @@ impl Handshake {
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         OPEN!([], key, 0, packet.encrypted_nothing, hash)?;
         let mut assigned_ip: [u8; 4] = [0, 0, 0, 0];
+
+        // Get assigned ip
         OPEN!(assigned_ip, key, 0, packet.arbitrary_payload, hash)?;
+        // assigned_ip.copy_from_slice(&packet.arbitrary_payload);
 
         // responder.hash = HASH(responder.hash || msg.encrypted_nothing)
         // hash = HASH!(hash, buf[ENC_NOTHING_OFF..ENC_NOTHING_OFF + ENC_NOTHING_SZ]);
@@ -576,7 +579,11 @@ impl Handshake {
             [0u8; 16]
         };
 
-        dst[mac2_off..].copy_from_slice(&msg_mac2[..]);
+        if arb_off > 0 {
+            dst[mac2_off..mac2_off + 16].copy_from_slice(&msg_mac2[..]);
+        } else {
+            dst[mac2_off..].copy_from_slice(&msg_mac2[..]);
+        }
 
         self.cookies.index = local_index;
         self.cookies.last_mac1 = Some(msg_mac1);

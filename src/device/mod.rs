@@ -961,6 +961,8 @@ fn set_peer<T: Tun, S: Sock>(
 }
 
 fn setup_interface(ip: &[u8], tun_name: &str) {
+    println!("{}: {:?}", tun_name, ip);
+    return;
     //set the interface address if provided, and bring up the interface
     // TODO: unset current iface ip
     if let Err(e) = Command::new("/sbin/ip")

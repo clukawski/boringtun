@@ -86,7 +86,7 @@ const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
 
 // Size of arbitrary data to append to handshake response
-const HANDSHAKE_ARB_DATA_SZ: usize = 4;
+const HANDSHAKE_ARB_DATA_SZ: usize = 20;
 // Size of the handshake response + arbritrary data (used in packet
 // pattern matching in Tunn::parse_incoming_packet)
 const HANDSHAKE_RESP_ARB_SZ: usize = HANDSHAKE_RESP_SZ + HANDSHAKE_ARB_DATA_SZ;
@@ -294,7 +294,7 @@ impl Tunn {
                     receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),
                     unencrypted_ephemeral: &src[12..44],
                     encrypted_nothing: &src[44..60],
-                    arbitrary_payload: &src[93..HANDSHAKE_RESP_ARB_SZ],
+                    arbitrary_payload: &src[92..HANDSHAKE_RESP_ARB_SZ],
                 })
             }
             (COOKIE_REPLY, COOKIE_REPLY_SZ) => Packet::PacketCookieReply(PacketCookieReply {
