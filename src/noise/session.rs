@@ -23,7 +23,7 @@ pub struct Session {
     sender: ChaCha20Poly1305,
     sending_key_counter: AtomicUsize,
     receiving_key_counter: Mutex<ReceivingKeyCounterValidator>,
-    pub assigned_ip: [u8; 4],
+    pub assigned_ip: [u8; 5],
 }
 
 impl std::fmt::Debug for Session {
@@ -160,7 +160,7 @@ impl Session {
         peer_index: u32,
         receiving_key: [u8; 32],
         sending_key: [u8; 32],
-        assigned_ip: [u8; 4],
+        assigned_ip: [u8; 5],
     ) -> Session {
         Session {
             receiving_index: local_index,

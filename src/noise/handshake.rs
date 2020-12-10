@@ -480,7 +480,7 @@ impl Handshake {
         hash = HASH!(hash, temp2);
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         OPEN!([], key, 0, packet.encrypted_nothing, hash)?;
-        let mut assigned_ip: [u8; 4] = [0, 0, 0, 0];
+        let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
 
         // Get assigned ip
         OPEN!(assigned_ip, key, 0, packet.arbitrary_payload, hash)?;
@@ -745,12 +745,8 @@ impl Handshake {
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
         let ip_bytes = self.ip_list.as_ref().clone().lock().pop().unwrap();
-        let ip_str = format!(
-            "{}.{}.{}.{}/{}",
-            ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], ip_bytes[4]
-        );
         // Seal arbitrary data (currenly IP)
-        SEAL!(arbitrary_data, key, 0, [127, 0, 0, 1], hash);
+        SEAL!(arbitrary_data, key, 0, ip_bytes, hash);
         // Derive keys
         // temp1 = HMAC(initiator.chaining_key, [empty])
         // temp2 = HMAC(temp1, 0x1)
@@ -770,7 +766,7 @@ impl Handshake {
 
         Ok((
             dst,
-            Session::new(local_index, peer_index, temp2, temp3, [0, 0, 0, 0]),
+            Session::new(local_index, peer_index, temp2, temp3, [0, 0, 0, 0, 0]),
         ))
     }
 }
