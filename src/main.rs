@@ -189,7 +189,7 @@ fn main() {
         logger = Logger::root(drain, o!());
     }
 
-    let ip_list = Some(Arc::new(Mutex::new(vec![[127, 0, 0, 1]])));
+    let ip_list = Arc::new(Mutex::new(vec![[100, 64, 0, 101, 10]]));
     let config = DeviceConfig {
         n_threads,
         logger: logger.clone(),
@@ -199,7 +199,7 @@ fn main() {
         peer_auth_script: Some(peer_auth.to_string()),
         listen_port: listen_port,
         tun_name: Some(tun_name.to_string()),
-        ip_list: ip_list,
+        ip_list: Some(ip_list.clone()),
     };
 
     let mut device_handle: DeviceHandle = match DeviceHandle::new(&tun_name, config, private_key) {

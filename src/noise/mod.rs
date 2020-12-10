@@ -140,7 +140,7 @@ impl Tunn {
         persistent_keepalive: Option<u16>,
         index: u32,
         rate_limiter: Option<Arc<RateLimiter>>,
-        ip_list: Option<Arc<Mutex<Vec<[u8; 4]>>>>,
+        ip_list: Option<Arc<Mutex<Vec<[u8; 5]>>>>,
     ) -> Result<Box<Tunn>, &'static str> {
         let static_public = Arc::new(static_private.public_key());
 

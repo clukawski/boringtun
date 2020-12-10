@@ -143,7 +143,7 @@ pub struct DeviceConfig {
     pub peer_auth_script: Option<String>,
     pub listen_port: u16,
     pub tun_name: Option<String>,
-    pub ip_list: Option<Arc<Mutex<Vec<[u8; 4]>>>>,
+    pub ip_list: Option<Arc<Mutex<Vec<[u8; 5]>>>>,
 }
 
 impl Default for DeviceConfig {

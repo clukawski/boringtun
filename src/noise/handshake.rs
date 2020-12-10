@@ -172,7 +172,7 @@ pub struct Handshake {
     last_handshake_timestamp: Tai64N, // The timestamp of the last handshake we received
     stamper: TimeStamper,             // TODO: make TimeStamper a singleton
     pub(super) last_rtt: Option<u32>,
-    pub ip_list: Arc<Mutex<Vec<[u8; 4]>>>,
+    pub ip_list: Arc<Mutex<Vec<[u8; 5]>>>,
 }
 
 #[derive(Default)]
@@ -274,7 +274,7 @@ impl Handshake {
         peer_static_public: Arc<X25519PublicKey>,
         global_idx: u32,
         preshared_key: Option<[u8; 32]>,
-        ip_list: Arc<Mutex<Vec<[u8; 4]>>>,
+        ip_list: Arc<Mutex<Vec<[u8; 5]>>>,
     ) -> Result<Handshake, WireGuardError> {
         let params = NoiseParams::new(
             static_private,
@@ -744,6 +744,11 @@ impl Handshake {
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
+        let ip_bytes = self.ip_list.as_ref().clone().lock().pop().unwrap();
+        let ip_str = format!(
+            "{}.{}.{}.{}/{}",
+            ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], ip_bytes[4]
+        );
         // Seal arbitrary data (currenly IP)
         SEAL!(arbitrary_data, key, 0, [127, 0, 0, 1], hash);
         // Derive keys
