@@ -372,6 +372,13 @@ impl<T: Tun, S: Sock> Device<T, S> {
         )
         .unwrap();
 
+        let ip_bytes = tunn.assigned_ip.lock().get();
+        let ip_str = format!(
+            "{}.{}.{}.{}/{}",
+            ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], ip_bytes[4]
+        );
+        let assigned_ips = vec![AllowedIP::from_str(&ip_str).ok().unwrap()];
+
         {
             let pub_key = base64::encode(pub_key.as_bytes());
             let peer_name = format!("{}…{}", &pub_key[0..4], &pub_key[pub_key.len() - 4..]);
@@ -379,13 +386,13 @@ impl<T: Tun, S: Sock> Device<T, S> {
             tunn.set_logger(peer_logger);
         }
 
-        let peer = Peer::new(tunn, next_index, endpoint, &allowed_ips, preshared_key);
+        let peer = Peer::new(tunn, next_index, endpoint, &assigned_ips, preshared_key);
 
         let peer = Arc::new(peer);
         self.peers.insert(pub_key, Arc::clone(&peer));
         self.peers_by_idx.insert(next_index, Arc::clone(&peer));
 
-        for AllowedIP { addr, cidr } in allowed_ips {
+        for AllowedIP { addr, cidr } in assigned_ips {
             self.peers_by_ip.insert(addr, cidr as _, Arc::clone(&peer));
         }
 

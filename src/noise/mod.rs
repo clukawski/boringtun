@@ -67,7 +67,7 @@ pub struct Tunn {
     timers: timers::Timers, // Keeps tabs on the expiring timers
     tx_bytes: AtomicUsize,
     rx_bytes: AtomicUsize,
-    pub assigned_ip: Mutex<Cell<[u8; 4]>>,
+    pub assigned_ip: Mutex<Cell<[u8; 5]>>,
 
     rate_limiter: Arc<RateLimiter>,
 
@@ -170,7 +170,7 @@ impl Tunn {
             rate_limiter: rate_limiter.unwrap_or_else(|| {
                 Arc::new(RateLimiter::new(&static_public, PEER_HANDSHAKE_RATE_LIMIT))
             }),
-            assigned_ip: Mutex::new(Cell::new([0, 0, 0, 0])),
+            assigned_ip: Mutex::new(Cell::new([0, 0, 0, 0, 0])),
         };
 
         Ok(Box::new(tunn))
@@ -347,7 +347,7 @@ impl Tunn {
             let mut handshake = self.handshake.lock();
             handshake.receive_handshake_response(p)?
         };
-        let mut assigned_ip: [u8; 4] = [127, 0, 0, 1];
+        let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
         assigned_ip.copy_from_slice(&session.assigned_ip);
         let keepalive_packet = session.format_packet_data(&[], dst);
         // Store new session in ring buffer
