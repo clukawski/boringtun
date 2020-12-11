@@ -31,6 +31,7 @@ pub mod udp;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::convert::From;
+use std::convert::TryInto;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::os::unix::io::AsRawFd;
@@ -317,6 +318,23 @@ impl<T: Tun, S: Sock> Device<T, S> {
         if let Some(peer) = self.peers.remove(pub_key) {
             // Found a peer to remove, now purge all references to it:
             peer.shutdown_endpoint(); // close open udp socket and free the closure
+            for (_, ip, cidr) in peer.allowed_ips() {
+                if let IpAddr::V4(addr) = ip {
+                    let octets = &addr.octets();
+                    match &self.config.ip_list {
+                        Some(list) => {
+                            list.clone().lock().push([
+                                octets[0],
+                                octets[1],
+                                octets[2],
+                                octets[3],
+                                cidr.try_into().unwrap(),
+                            ]);
+                        }
+                        None => {}
+                    }
+                };
+            }
             self.peers_by_idx.remove(&peer.index()); // peers_by_idx
             self.peers_by_ip
                 .remove(&|p: &Arc<Peer<S>>| Arc::ptr_eq(&peer, p)); // peers_by_ip
