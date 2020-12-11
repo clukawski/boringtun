@@ -35,14 +35,14 @@ use std::convert::TryInto;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::os::unix::io::AsRawFd;
+use std::process::exit;
+use std::process::Command;
+use std::str;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
-use std::process::Command;
-use std::str::FromStr;
-use std::str;
-use std::process::exit;
 
 use crate::crypto::x25519::*;
 use crate::noise::errors::*;
@@ -198,7 +198,11 @@ struct ThreadData<T: Tun> {
 }
 
 impl<T: Tun, S: Sock> DeviceHandle<T, S> {
-    pub fn new(name: &str, config: DeviceConfig, pkey: Option<X25519SecretKey>) -> Result<DeviceHandle<T, S>, Error> {
+    pub fn new(
+        name: &str,
+        config: DeviceConfig,
+        pkey: Option<X25519SecretKey>,
+    ) -> Result<DeviceHandle<T, S>, Error> {
         let n_threads = config.n_threads;
         let port = config.listen_port.clone();
         let mut wg_interface = Device::<T, S>::new(name, config)?;
@@ -654,18 +658,15 @@ impl<T: Tun, S: Sock> Device<T, S> {
         self.queue.new_event(
             udp.as_raw_fd(),
             Box::new(move |d, t| {
-                
                 // Handler that handles anonymous packets over UDP
                 let mut iter = MAX_ITR;
-                
                 // Loop while we have packets on the anonymous connection
                 while let Ok((addr, packet)) = udp.recvfrom(&mut t.src_buf[..]) {
+                    let (private_key, public_key) =
+                        d.key_pair.as_ref().expect("No Private Key set");
 
-                    let (private_key, public_key) = d.key_pair.as_ref().expect("No Private Key set");
-                    
                     // The rate limiter initially checks mac1 and mac2, and optionally asks to send a cookie
                     let parsed_packet = {
-
                         let rate_limiter = d.rate_limiter.as_ref().unwrap();
                         match rate_limiter.verify_packet(Some(addr.ip()), packet, &mut t.dst_buf) {
                             Ok(packet) => packet,
@@ -675,9 +676,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             }
                             Err(_) => continue,
                         }
-
                     };
-                    
                     // find the peer
                     let peer = {
                         match &parsed_packet {
@@ -687,12 +686,16 @@ impl<T: Tun, S: Sock> Device<T, S> {
                                         check_auth(&hh, d);
                                         d.peers
                                             .get(&X25519PublicKey::from(&hh.peer_static_public[..]))
-                                    },
-                                    Err(_) => None, 
+                                    }
+                                    Err(_) => None,
                                 }
                             }
-                            Packet::HandshakeResponse(p) => d.peers_by_idx.get(&(p.receiver_idx >> 8)),
-                            Packet::PacketCookieReply(p) => d.peers_by_idx.get(&(p.receiver_idx >> 8)),
+                            Packet::HandshakeResponse(p) => {
+                                d.peers_by_idx.get(&(p.receiver_idx >> 8))
+                            }
+                            Packet::PacketCookieReply(p) => {
+                                d.peers_by_idx.get(&(p.receiver_idx >> 8))
+                            }
                             Packet::PacketData(p) => d.peers_by_idx.get(&(p.receiver_idx >> 8)),
                         }
                     };
@@ -898,12 +901,10 @@ impl<T: Tun, S: Sock> Device<T, S> {
         )?;
         Ok(())
     }
-
 }
 
 // check external auth for the provided public key, if it exists, create a new peer and return it
-fn check_auth<T: Tun, S: Sock> (hh: &handshake::HalfHandshake, d: &mut LockReadGuard<Device<T, S>>) {
-    
+fn check_auth<T: Tun, S: Sock>(hh: &handshake::HalfHandshake, d: &mut LockReadGuard<Device<T, S>>) {
     d.try_writeable(
         |device| device.trigger_yield(),
         |mut device| {
@@ -912,11 +913,10 @@ fn check_auth<T: Tun, S: Sock> (hh: &handshake::HalfHandshake, d: &mut LockReadG
             // check if we have an auth script to try
             let auth_script = match &device.config.peer_auth_script {
                 Some(auth_script) => auth_script,
-                None => return
+                None => return,
             };
 
             let pub_key = &X25519PublicKey::from(&hh.peer_static_public[..]);
-            
             // check if we have a peer already and return
             if device.peers.get(pub_key).is_some() {
                 return;
@@ -960,7 +960,7 @@ fn check_auth<T: Tun, S: Sock> (hh: &handshake::HalfHandshake, d: &mut LockReadG
                     }
                 }
             }
-        }
+        },
     )
     .unwrap()
 }
@@ -970,13 +970,11 @@ fn set_peer<T: Tun, S: Sock>(
     pub_key: X25519PublicKey,
     allowed_ips: Vec<AllowedIP>,
     preshared_key: Option<[u8; 32]>,
-){
-
+) {
     let remove = false;
     let replace_ips = false;
     let endpoint = None;
     let keepalive = None;
-    
     d.update_peer(
         pub_key,
         remove,
@@ -986,7 +984,6 @@ fn set_peer<T: Tun, S: Sock>(
         keepalive,
         preshared_key,
     );
-
 }
 
 fn setup_interface(ip: &[u8], tun_name: &str) {
