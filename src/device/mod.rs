@@ -334,6 +334,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
                                 octets[3],
                                 cidr.try_into().unwrap(),
                             ]);
+                            list.clone().lock().sort();
                         }
                         None => {}
                     }
