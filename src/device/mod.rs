@@ -372,12 +372,16 @@ impl<T: Tun, S: Sock> Device<T, S> {
         )
         .unwrap();
 
-        let ip_bytes = tunn.assigned_ip.lock().get();
-        let ip_str = format!(
-            "{}.{}.{}.{}/{}",
-            ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], ip_bytes[4]
-        );
-        let assigned_ips = vec![AllowedIP::from_str(&ip_str).ok().unwrap()];
+        // Ensure the assigned IP is populated/handshake is done
+        let mut assigned_ips: Vec<AllowedIP> = vec![];
+        while assigned_ips.len() == 0 {
+            let ip_bytes = tunn.assigned_ip.lock().get();
+            let ip_str = format!(
+                "{}.{}.{}.{}/{}",
+                ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], ip_bytes[4]
+            );
+            assigned_ips = vec![AllowedIP::from_str(&ip_str).ok().unwrap()];
+        }
 
         {
             let pub_key = base64::encode(pub_key.as_bytes());
