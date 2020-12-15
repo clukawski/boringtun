@@ -744,7 +744,12 @@ impl Handshake {
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
-        let ip_bytes = self.ip_list.as_ref().clone().lock().pop().unwrap();
+        let mut ip_bytes = [0, 0, 0, 0, 0];
+        let maybe_ip = self.ip_list.as_ref().clone().lock().pop();
+        match maybe_ip {
+            Some(ip) => ip_bytes = ip,
+            None => println!("no IP to seal"),
+        }
         // Seal arbitrary data (currenly IP)
         SEAL!(arbitrary_data, key, 0, ip_bytes, hash);
         // Derive keys
