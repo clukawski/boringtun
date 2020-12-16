@@ -750,7 +750,6 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             if let Some(t) = &d.config.tun_name {
                                 if handshake_resp {
                                     let tun_aip = peer.tunnel.assigned_ip.lock();
-                                    peer.update_assigned_ip();
                                     let assigned_ip = tun_aip.get();
                                     println! {"{:?}", assigned_ip};
                                     setup_interface(&assigned_ip, &t);
