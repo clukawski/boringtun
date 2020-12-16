@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use crate::device::*;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
+use std::cell::Cell;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -19,7 +20,7 @@ pub struct Peer<S: Sock> {
     endpoint: RwLock<Endpoint<S>>,
     allowed_ips: AllowedIps<()>,
     preshared_key: Option<[u8; 32]>,
-    pub assigned_ip: Option<[u8; 5]>,
+    pub assigned_ip: Mutex<Cell<[u8; 5]>>,
 }
 
 #[derive(Debug)]
@@ -53,7 +54,6 @@ impl<S: Sock> Peer<S> {
         endpoint: Option<SocketAddr>,
         allowed_ips: &[AllowedIP],
         preshared_key: Option<[u8; 32]>,
-        assigned_ip: Option<[u8; 5]>,
     ) -> Peer<S> {
         Peer {
             tunnel,
@@ -64,12 +64,16 @@ impl<S: Sock> Peer<S> {
             }),
             allowed_ips: allowed_ips.iter().collect(),
             preshared_key,
-            assigned_ip: assigned_ip,
+            assigned_ip: Mutex::new(Cell::new([0, 0, 0, 0, 0])),
         }
     }
 
     pub fn update_timers<'a>(&self, dst: &'a mut [u8]) -> TunnResult<'a> {
         self.tunnel.update_timers(dst)
+    }
+
+    pub fn update_assigned_ip(&self) {
+        self.assigned_ip.lock().set(self.tunnel.assigned_ip.lock().get());
     }
 
     pub fn endpoint(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {

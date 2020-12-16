@@ -323,7 +323,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
                 "removing peer tunnel {:?}",
                 peer_data.clone().as_ref().assigned_ip
             );
-            let peer_ip = peer_data.clone().as_ref().assigned_ip.unwrap();
+            let peer_ip = peer_data.clone().as_ref().assigned_ip.lock().get();
             match &self.config.ip_list {
                 Some(list) => {
                     list.clone()
@@ -393,22 +393,6 @@ impl<T: Tun, S: Sock> Device<T, S> {
         )
         .unwrap();
 
-        // Ensure the assigned IP is populated/handshake is done
-        let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
-        while assigned_ip[0] == 0
-            && assigned_ip[1] == 0
-            && assigned_ip[2] == 0
-            && assigned_ip[3] == 0
-            && assigned_ip[4] == 0
-        {
-            assigned_ip = tunn.assigned_ip.lock().get();
-        }
-
-        println!(
-            "assigned_ip = tunn.assigned_ip.lock().get(): {:?}",
-            assigned_ip
-        );
-
         {
             let pub_key = base64::encode(pub_key.as_bytes());
             let peer_name = format!("{}…{}", &pub_key[0..4], &pub_key[pub_key.len() - 4..]);
@@ -422,7 +406,6 @@ impl<T: Tun, S: Sock> Device<T, S> {
             endpoint,
             &allowed_ips,
             preshared_key,
-            Some(assigned_ip),
         );
 
         let peer = Arc::new(peer);
@@ -767,6 +750,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             if let Some(t) = &d.config.tun_name {
                                 if handshake_resp {
                                     let tun_aip = peer.tunnel.assigned_ip.lock();
+                                    peer.update_assigned_ip();
                                     let assigned_ip = tun_aip.get();
                                     println! {"{:?}", assigned_ip};
                                     setup_interface(&assigned_ip, &t);
