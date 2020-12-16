@@ -72,8 +72,9 @@ impl<S: Sock> Peer<S> {
         self.tunnel.update_timers(dst)
     }
 
-    pub fn update_assigned_ip(&self) {
-        self.assigned_ip.lock().set(self.tunnel.assigned_ip.lock().get());
+    pub fn get_assigned_ip(&self) -> [u8; 5] {
+        let assigned_ip = self.tunnel.assigned_ip.lock().get();
+        return assigned_ip;
     }
 
     pub fn endpoint(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {

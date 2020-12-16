@@ -322,10 +322,25 @@ impl Tunn {
             let mut handshake = self.handshake.lock();
             handshake.receive_handshake_initialization(p, dst)?
         };
+        let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
+        assigned_ip.copy_from_slice(&session.assigned_ip);
 
         // Store new session in ring buffer
         let index = session.local_index();
         *self.sessions[index % N_SESSIONS].write() = Some(session);
+
+        let ip = self.assigned_ip.lock();
+        if assigned_ip[0] == 0
+            && assigned_ip[1] == 0
+            && assigned_ip[2] == 0
+            && assigned_ip[3] == 0
+            && assigned_ip[4] == 0
+        {
+            println!("not setting IP, follow up handshake")
+        } else {
+            ip.set(assigned_ip);
+            let ip_print = ip.get();
+        }
 
         self.timer_tick(TimerName::TimeLastPacketReceived);
         self.timer_tick(TimerName::TimeLastPacketSent);

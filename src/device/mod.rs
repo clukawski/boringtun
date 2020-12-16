@@ -321,9 +321,9 @@ impl<T: Tun, S: Sock> Device<T, S> {
         if let Some(peer_data) = self.peers.get(pub_key.clone()) {
             println!(
                 "removing peer tunnel {:?}",
-                peer_data.clone().as_ref().assigned_ip
+                peer_data.get_assigned_ip(),
             );
-            let peer_ip = peer_data.clone().as_ref().assigned_ip.lock().get();
+            let peer_ip = peer_data.get_assigned_ip();
             match &self.config.ip_list {
                 Some(list) => {
                     list.clone()

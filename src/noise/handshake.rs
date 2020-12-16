@@ -771,7 +771,7 @@ impl Handshake {
 
         Ok((
             dst,
-            Session::new(local_index, peer_index, temp2, temp3, [0, 0, 0, 0, 0]),
+            Session::new(local_index, peer_index, temp2, temp3, ip_bytes.clone()),
         ))
     }
 }
