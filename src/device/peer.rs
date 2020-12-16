@@ -19,6 +19,7 @@ pub struct Peer<S: Sock> {
     endpoint: RwLock<Endpoint<S>>,
     allowed_ips: AllowedIps<()>,
     preshared_key: Option<[u8; 32]>,
+    pub assigned_ip: Option<[u8; 5]>,
 }
 
 #[derive(Debug)]
@@ -52,6 +53,7 @@ impl<S: Sock> Peer<S> {
         endpoint: Option<SocketAddr>,
         allowed_ips: &[AllowedIP],
         preshared_key: Option<[u8; 32]>,
+        assigned_ip: Option<[u8; 5]>,
     ) -> Peer<S> {
         Peer {
             tunnel,
@@ -62,6 +64,7 @@ impl<S: Sock> Peer<S> {
             }),
             allowed_ips: allowed_ips.iter().collect(),
             preshared_key,
+            assigned_ip: assigned_ip,
         }
     }
 

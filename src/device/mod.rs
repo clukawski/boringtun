@@ -31,7 +31,6 @@ pub mod udp;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::convert::From;
-use std::convert::TryInto;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::os::unix::io::AsRawFd;
@@ -319,31 +318,31 @@ impl<T: Tun, S: Sock> Device<T, S> {
     }
 
     fn remove_peer(&mut self, pub_key: &X25519PublicKey) {
+        if let Some(peer_data) = self.peers.get(pub_key.clone()) {
+            println!("removing peer tunnel {:?}", peer_data.clone().as_ref().assigned_ip);
+            let peer_ip = peer_data.clone().as_ref().assigned_ip.unwrap();
+            match &self.config.ip_list {
+                Some(list) => {
+                    list.clone().lock().push([
+                        peer_ip[0],
+                        peer_ip[1],
+                        peer_ip[2],
+                        peer_ip[3],
+                        peer_ip[4],
+                    ]);
+                    list.clone().lock().sort();
+                }
+                None => {}
+            }
+        }
+
         if let Some(peer) = self.peers.remove(pub_key) {
             // Found a peer to remove, now purge all references to it:
             peer.shutdown_endpoint(); // close open udp socket and free the closure
-            for (_, ip, cidr) in peer.allowed_ips() {
-                if let IpAddr::V4(addr) = ip {
-                    let octets = &addr.octets();
-                    match &self.config.ip_list {
-                        Some(list) => {
-                            list.clone().lock().push([
-                                octets[0],
-                                octets[1],
-                                octets[2],
-                                octets[3],
-                                cidr.try_into().unwrap(),
-                            ]);
-                            list.clone().lock().sort();
-                        }
-                        None => {}
-                    }
-                };
-            }
             self.peers_by_idx.remove(&peer.index()); // peers_by_idx
             self.peers_by_ip
                 .remove(&|p: &Arc<Peer<S>>| Arc::ptr_eq(&peer, p)); // peers_by_ip
-
+            println!("removed peer");
             info!(peer.tunnel.logger, "Peer removed");
         }
     }
@@ -396,14 +395,10 @@ impl<T: Tun, S: Sock> Device<T, S> {
         .unwrap();
 
         // Ensure the assigned IP is populated/handshake is done
-        let mut assigned_ips: Vec<AllowedIP> = vec![];
-        while assigned_ips.len() == 0 {
-            let ip_bytes = tunn.assigned_ip.lock().get();
-            let ip_str = format!(
-                "{}.{}.{}.{}/{}",
-                ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], ip_bytes[4]
-            );
-            assigned_ips = vec![AllowedIP::from_str(&ip_str).ok().unwrap()];
+        let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
+        let zero_ip: [u8; 5] = [0, 0, 0, 0, 0];
+        while assigned_ip.cmp(&zero_ip) == std::cmp::Ordering::Equal {
+            assigned_ip = tunn.assigned_ip.lock().get();
         }
 
         {
@@ -413,13 +408,13 @@ impl<T: Tun, S: Sock> Device<T, S> {
             tunn.set_logger(peer_logger);
         }
 
-        let peer = Peer::new(tunn, next_index, endpoint, &assigned_ips, preshared_key);
+        let peer = Peer::new(tunn, next_index, endpoint, &allowed_ips, preshared_key, Some(assigned_ip));
 
         let peer = Arc::new(peer);
         self.peers.insert(pub_key, Arc::clone(&peer));
         self.peers_by_idx.insert(next_index, Arc::clone(&peer));
 
-        for AllowedIP { addr, cidr } in assigned_ips {
+        for AllowedIP { addr, cidr } in allowed_ips {
             self.peers_by_ip.insert(addr, cidr as _, Arc::clone(&peer));
         }
 
