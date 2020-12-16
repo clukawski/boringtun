@@ -736,6 +736,8 @@ mod tests {
                 use_connected_socket: false,
                 #[cfg(target_os = "linux")]
                 use_multi_queue: true,
+                peer_auth_script: None,
+                listen_port: None,
                 tun_name: None,
                 ip_list: None,
             },
