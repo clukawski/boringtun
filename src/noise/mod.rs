@@ -144,7 +144,13 @@ impl Tunn {
     ) -> Result<Box<Tunn>, &'static str> {
         let static_public = Arc::new(static_private.public_key());
 
-        let some_ip_list = ip_list.as_ref().unwrap();
+        let mut assigned_ip = [0, 0, 0, 0, 0];
+        let maybe_ip = ip_list.as_ref().unwrap().clone().lock().pop();
+        match maybe_ip {
+            Some(ip) => assigned_ip = ip,
+            None => println!("no IP to seal"),
+        }
+
         let tunn = Tunn {
             handshake: Mutex::new(
                 Handshake::new(
@@ -153,7 +159,7 @@ impl Tunn {
                     peer_static_public,
                     index << 8,
                     preshared_key,
-                    some_ip_list.clone(),
+                    assigned_ip,
                 )
                 .map_err(|_| "Invalid parameters")?,
             ),
@@ -339,7 +345,6 @@ impl Tunn {
             println!("not setting IP, follow up handshake")
         } else {
             ip.set(assigned_ip);
-            let ip_print = ip.get();
         }
 
         self.timer_tick(TimerName::TimeLastPacketReceived);

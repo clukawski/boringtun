@@ -8,10 +8,8 @@ use crate::crypto::x25519::{X25519PublicKey, X25519SecretKey};
 use crate::noise::errors::WireGuardError;
 use crate::noise::make_array;
 use crate::noise::session::Session;
-use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
-use std::vec::Vec;
 
 // static CONSTRUCTION: &'static [u8] = b"Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s";
 // static IDENTIFIER: &'static [u8] = b"WireGuard v1 zx2c4 Jason@zx2c4.com";
@@ -172,7 +170,7 @@ pub struct Handshake {
     last_handshake_timestamp: Tai64N, // The timestamp of the last handshake we received
     stamper: TimeStamper,             // TODO: make TimeStamper a singleton
     pub(super) last_rtt: Option<u32>,
-    pub ip_list: Arc<Mutex<Vec<[u8; 5]>>>,
+    pub assigned_ip: [u8; 5],
 }
 
 #[derive(Default)]
@@ -274,7 +272,7 @@ impl Handshake {
         peer_static_public: Arc<X25519PublicKey>,
         global_idx: u32,
         preshared_key: Option<[u8; 32]>,
-        ip_list: Arc<Mutex<Vec<[u8; 5]>>>,
+        assigned_ip: [u8; 5],
     ) -> Result<Handshake, WireGuardError> {
         let params = NoiseParams::new(
             static_private,
@@ -292,7 +290,7 @@ impl Handshake {
             stamper: TimeStamper::new(),
             cookies: Default::default(),
             last_rtt: None,
-            ip_list: ip_list,
+            assigned_ip: assigned_ip,
         })
     }
 
@@ -744,14 +742,9 @@ impl Handshake {
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
-        let mut ip_bytes = [0, 0, 0, 0, 0];
-        let maybe_ip = self.ip_list.as_ref().clone().lock().pop();
-        match maybe_ip {
-            Some(ip) => ip_bytes = ip,
-            None => println!("no IP to seal"),
-        }
-        // Seal arbitrary data (currenly IP)
-        SEAL!(arbitrary_data, key, 0, ip_bytes, hash);
+        // Seal assigned IP
+        SEAL!(arbitrary_data, key, 0, self.assigned_ip, hash);
+
         // Derive keys
         // temp1 = HMAC(initiator.chaining_key, [empty])
         // temp2 = HMAC(temp1, 0x1)
@@ -771,7 +764,13 @@ impl Handshake {
 
         Ok((
             dst,
-            Session::new(local_index, peer_index, temp2, temp3, ip_bytes.clone()),
+            Session::new(
+                local_index,
+                peer_index,
+                temp2,
+                temp3,
+                self.assigned_ip.clone(),
+            ),
         ))
     }
 }
