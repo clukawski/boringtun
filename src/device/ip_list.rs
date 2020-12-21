@@ -13,8 +13,9 @@ struct IpList {
 }
 
 impl IpList {
-    pub fn new(cidr: [u8; 5]) -> Result<IpList, Error> {
+    pub fn new(cidr: [u8; 5]) -> Option<IpList> {
         let subnet: u8 = cidr[4];
+        let mut index: usize = 0;
         // It can also be created from string representations.
         let net = Ipv4Cidr::new(Ipv4Addr::new(cidr[0], cidr[1], cidr[2], cidr[3]), subnet)
             .expect("Expected valid ip range");
@@ -28,6 +29,16 @@ impl IpList {
             let full_ip: [u8; 5] = [octets[0], octets[1], octets[2], octets[3], subnet];
             ip_list.push(full_ip);
         }
+
+        if ip_list.len() == 0 {
+            return None;
+        }
+
+        return IpList {
+            list: RefCell::new(ip_list),
+            allocated: Cell::new(HashMap::new()),
+            index: Cell::new(index),
+        };
     }
 
     pub fn get_ip(&mut self) -> Option<[u8; 5]> {
