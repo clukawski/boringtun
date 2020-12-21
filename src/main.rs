@@ -11,6 +11,7 @@ pub mod noise;
 
 use crypto::x25519::X25519SecretKey;
 use crate::device::drop_privileges::*;
+use crate::device::ip_list::IpList;
 use crate::device::*;
 use clap::{value_t, App, Arg};
 use daemonize::Daemonize;
