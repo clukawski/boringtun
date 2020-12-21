@@ -63,9 +63,15 @@ impl IpList {
         return Some(list[self.index.get()]);
     }
 
-    pub fn allocate_ip(&mut self, ip: [u8; 5]) {
+    pub fn allocate(&mut self, ip: [u8; 5]) {
         let allocated = self.allocated.get_mut();
 
         allocated.insert(ip, true);
+    }
+
+    pub fn deallocate(&mut self, ip: [u8; 5]) {
+        let allocated = self.allocated.get_mut();
+
+        allocated.remove(&ip);
     }
 }
