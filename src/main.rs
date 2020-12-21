@@ -18,6 +18,7 @@ use parking_lot::Mutex;
 use slog::{error, info, o, Drain, Logger};
 use std::fs::File;
 use std::fs;
+use std::net::Ipv4Addr;
 use std::os::unix::net::UnixDatagram;
 use std::process::exit;
 use std::process::Command;
@@ -71,6 +72,12 @@ fn main() {
                 .short("-i")
                 .env("WG_IFACE_ADDR")
                 .help("Interface address"),
+            Arg::with_name("cidr")
+                .takes_value(true)
+                .long("cidr")
+                .short("-c")
+                .env("WG_PEER_CIDR")
+                .help("Allocated CIDR"),
             Arg::with_name("listen-port")
                 .takes_value(true)
                 .long("listen-port")
@@ -127,6 +134,7 @@ fn main() {
     let listen_port: u16 = matches.value_of("listen-port").unwrap_or_default().parse().unwrap_or_default();
     let init_pkey = matches.value_of("private-key").unwrap_or_default();
     let init_address = matches.value_of("address").unwrap_or_default();
+    let cidr = matches.value_of("cidr").unwrap_or_default();
     let init_mtu = matches.value_of("mtu").unwrap_or_default();
 
     let mut private_key = None;
@@ -189,7 +197,14 @@ fn main() {
         logger = Logger::root(drain, o!());
     }
 
-    let ip_list = Arc::new(Mutex::new(vec![[100, 64, 0, 101, 10]]));
+    let cidr_str: Vec<&str> = cidr.split("/").collect();
+    let cidr_subnet = cidr_str[1].parse::<u8>().unwrap();
+    let cidr_addr: Ipv4Addr = cidr_str[0].parse().unwrap();
+    let octets = cidr_addr.octets();
+    let cidr_slice: [u8; 5] = [octets[0], octets[1], octets[2], octets[3], cidr_subnet];
+    let list = IpList::new(cidr_slice).unwrap();
+
+    let ip_list = Arc::new(Mutex::new(list));
     let config = DeviceConfig {
         n_threads,
         logger: logger.clone(),

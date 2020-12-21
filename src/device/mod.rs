@@ -50,6 +50,7 @@ use crate::noise::handshake::parse_handshake_anon;
 use crate::noise::rate_limiter::RateLimiter;
 use crate::noise::*;
 use allowed_ips::*;
+use ip_list::*;
 use peer::*;
 use poll::*;
 use tun::*;
@@ -144,7 +145,7 @@ pub struct DeviceConfig {
     pub peer_auth_script: Option<String>,
     pub listen_port: u16,
     pub tun_name: Option<String>,
-    pub ip_list: Option<Arc<Mutex<Vec<[u8; 5]>>>>,
+    pub ip_list: Option<Arc<Mutex<IpList>>>,
 }
 
 impl Default for DeviceConfig {
@@ -320,18 +321,10 @@ impl<T: Tun, S: Sock> Device<T, S> {
 
     fn remove_peer(&mut self, pub_key: &X25519PublicKey) {
         if let Some(peer_data) = self.peers.get(pub_key.clone()) {
-            println!(
-                "removing peer tunnel {:?}",
-                peer_data.get_assigned_ip(),
-            );
+            println!("removing peer tunnel {:?}", peer_data.get_assigned_ip(),);
             let peer_ip = peer_data.get_assigned_ip();
             match &self.config.ip_list {
-                Some(list) => {
-                    list.clone()
-                        .lock()
-                        .push([peer_ip[0], peer_ip[1], peer_ip[2], peer_ip[3], peer_ip[4]]);
-                    list.clone().lock().sort();
-                }
+                Some(list) => list.clone().lock().deallocate(peer_ip.clone()),
                 None => {}
             }
         }
@@ -377,12 +370,6 @@ impl<T: Tun, S: Sock> Device<T, S> {
             .as_ref()
             .expect("Private key must be set first");
 
-        let some_ip_list = self
-            .config
-            .ip_list
-            .as_ref()
-            .expect("Peer IP list not configured.")
-            .clone();
         let mut tunn = Tunn::new(
             Arc::clone(&device_key_pair.0),
             Arc::clone(&pub_key),
@@ -390,7 +377,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             keepalive,
             next_index,
             None,
-            Some(some_ip_list),
+            Some(self.config.ip_list.clone().unwrap()),
         )
         .unwrap();
 
@@ -401,13 +388,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             tunn.set_logger(peer_logger);
         }
 
-        let peer = Peer::new(
-            tunn,
-            next_index,
-            endpoint,
-            &allowed_ips,
-            preshared_key,
-        );
+        let peer = Peer::new(tunn, next_index, endpoint, &allowed_ips, preshared_key);
 
         let peer = Arc::new(peer);
         self.peers.insert(pub_key, Arc::clone(&peer));

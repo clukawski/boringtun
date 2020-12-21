@@ -10,6 +10,7 @@ mod tests;
 mod timers;
 
 use crate::crypto::x25519::*;
+use crate::device::ip_list::IpList;
 use crate::noise::errors::WireGuardError;
 use crate::noise::handshake::Handshake;
 use crate::noise::rate_limiter::RateLimiter;
@@ -68,6 +69,7 @@ pub struct Tunn {
     tx_bytes: AtomicUsize,
     rx_bytes: AtomicUsize,
     pub assigned_ip: Mutex<Cell<[u8; 5]>>,
+    ip_list: Option<Arc<Mutex<IpList>>>,
 
     rate_limiter: Arc<RateLimiter>,
 
@@ -140,15 +142,18 @@ impl Tunn {
         persistent_keepalive: Option<u16>,
         index: u32,
         rate_limiter: Option<Arc<RateLimiter>>,
-        ip_list: Option<Arc<Mutex<Vec<[u8; 5]>>>>,
+        ip_list: Option<Arc<Mutex<IpList>>>,
     ) -> Result<Box<Tunn>, &'static str> {
         let static_public = Arc::new(static_private.public_key());
 
-        let mut assigned_ip = [0, 0, 0, 0, 0];
-        let maybe_ip = ip_list.as_ref().unwrap().clone().lock().pop();
-        match maybe_ip {
-            Some(ip) => assigned_ip = ip,
-            None => println!("no IP to seal"),
+        let mut tunn_ip = [0, 0, 0, 0, 0];
+
+        if let Some(_) = ip_list {
+            let assigned_ip = ip_list.clone().unwrap().lock().get_ip();
+            match assigned_ip {
+                Some(ip) => tunn_ip = ip,
+                None => println!("no IP to seal"),
+            }
         }
 
         let tunn = Tunn {
@@ -159,7 +164,7 @@ impl Tunn {
                     peer_static_public,
                     index << 8,
                     preshared_key,
-                    assigned_ip,
+                    tunn_ip,
                 )
                 .map_err(|_| "Invalid parameters")?,
             ),
@@ -176,7 +181,8 @@ impl Tunn {
             rate_limiter: rate_limiter.unwrap_or_else(|| {
                 Arc::new(RateLimiter::new(&static_public, PEER_HANDSHAKE_RATE_LIMIT))
             }),
-            assigned_ip: Mutex::new(Cell::new([0, 0, 0, 0, 0])),
+            assigned_ip: Mutex::new(Cell::new(tunn_ip)),
+            ip_list: ip_list.clone(),
         };
 
         Ok(Box::new(tunn))
@@ -345,6 +351,9 @@ impl Tunn {
             println!("not setting IP, follow up handshake")
         } else {
             ip.set(assigned_ip);
+            if let Some(_) = self.ip_list {
+                self.ip_list.clone().unwrap().lock().allocate(assigned_ip);
+            }
         }
 
         self.timer_tick(TimerName::TimeLastPacketReceived);
