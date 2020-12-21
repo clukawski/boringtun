@@ -6,6 +6,7 @@ pub mod api;
 mod dev_lock;
 pub mod drop_privileges;
 mod integration_tests;
+pub mod ip_list;
 pub mod peer;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]

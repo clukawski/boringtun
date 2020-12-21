@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::vec::Vec;
 
-struct IpList {
+pub struct IpList {
     pub list: RefCell<Vec<[u8; 5]>>,
     pub allocated: Cell<HashMap<[u8; 5], bool>>,
     index: Cell<usize>,
@@ -15,7 +15,7 @@ struct IpList {
 impl IpList {
     pub fn new(cidr: [u8; 5]) -> Option<IpList> {
         let subnet: u8 = cidr[4];
-        let mut index: usize = 0;
+        let index: usize = 0;
         // It can also be created from string representations.
         let net = Ipv4Cidr::new(Ipv4Addr::new(cidr[0], cidr[1], cidr[2], cidr[3]), subnet)
             .expect("Expected valid ip range");
@@ -34,15 +34,15 @@ impl IpList {
             return None;
         }
 
-        return IpList {
+        return Some(IpList {
             list: RefCell::new(ip_list),
             allocated: Cell::new(HashMap::new()),
             index: Cell::new(index),
-        };
+        });
     }
 
     pub fn get_ip(&mut self) -> Option<[u8; 5]> {
-        let mut current = self.index.get();
+        let mut current: usize;
         let list = self.list.get_mut();
         let mut ip_avail = false;
         let allocated = self.allocated.get_mut();
