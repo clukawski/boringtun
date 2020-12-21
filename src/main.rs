@@ -198,14 +198,18 @@ fn main() {
         logger = Logger::root(drain, o!());
     }
 
-    let cidr_str: Vec<&str> = cidr.split("/").collect();
-    let cidr_subnet = cidr_str[1].parse::<u8>().unwrap();
-    let cidr_addr: Ipv4Addr = cidr_str[0].parse().unwrap();
-    let octets = cidr_addr.octets();
-    let cidr_slice: [u8; 5] = [octets[0], octets[1], octets[2], octets[3], cidr_subnet];
-    let list = IpList::new(cidr_slice).unwrap();
+    // Ingest CIDR range if peer is allocating IPs
+    let mut ip_list: Option<Arc<Mutex<IpList>>> = None;
+    if cidr.len() > 0 {
+        let cidr_str: Vec<&str> = cidr.split("/").collect();
+        let cidr_subnet = cidr_str[1].parse::<u8>().unwrap();
+        let cidr_addr: Ipv4Addr = cidr_str[0].parse().unwrap();
+        let octets = cidr_addr.octets();
+        let cidr_slice: [u8; 5] = [octets[0], octets[1], octets[2], octets[3], cidr_subnet];
+        let list = IpList::new(cidr_slice).unwrap();
+        ip_list = Some(Arc::new(Mutex::new(list)));
+    }
 
-    let ip_list = Arc::new(Mutex::new(list));
     let config = DeviceConfig {
         n_threads,
         logger: logger.clone(),
@@ -215,7 +219,7 @@ fn main() {
         peer_auth_script: Some(peer_auth.to_string()),
         listen_port: listen_port,
         tun_name: Some(tun_name.to_string()),
-        ip_list: Some(ip_list.clone()),
+        ip_list: ip_list.clone(),
     };
 
     let mut device_handle: DeviceHandle = match DeviceHandle::new(&tun_name, config, private_key) {
