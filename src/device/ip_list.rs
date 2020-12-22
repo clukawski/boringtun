@@ -42,21 +42,24 @@ impl IpList {
     }
 
     pub fn get_ip(&mut self) -> Option<[u8; 5]> {
-        let mut current: usize;
+        let mut current = self.index.get();
         let list = self.list.get_mut();
         let mut ip_avail = false;
         let allocated = self.allocated.get_mut();
         let mut counter: usize = 0;
 
         while !ip_avail {
+            if current == list.len() {
+                self.index.set(0);
+            }
             current = self.index.get();
             if counter == list.len() {
                 return None;
             }
 
-            self.index.set(current + 1);
             let ip = list[self.index.get()];
             ip_avail = !allocated.contains_key(&ip);
+            self.index.set(current + 1);
             counter += 1;
         }
 
