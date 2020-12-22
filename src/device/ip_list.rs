@@ -59,8 +59,10 @@ impl IpList {
 
             let ip = list[self.index.get()];
             ip_avail = !allocated.contains_key(&ip);
-            self.index.set(current + 1);
-            counter += 1;
+            if !ip_avail {
+                self.index.set(current + 1);
+                counter += 1;
+            }
         }
 
         return Some(list[self.index.get()]);
