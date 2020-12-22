@@ -377,7 +377,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             keepalive,
             next_index,
             None,
-            Some(self.config.ip_list.clone().unwrap()),
+            self.config.ip_list.clone(),
         )
         .unwrap();
 
@@ -963,52 +963,21 @@ fn set_peer<T: Tun, S: Sock>(
 }
 
 fn setup_interface(ip: &[u8], tun_name: &str) {
-    println!("{}: {:?}", tun_name, ip);
-    return;
-    //set the interface address if provided, and bring up the interface
-    // TODO: unset current iface ip
-    if let Err(e) = Command::new("/sbin/ip")
-        .arg("link")
-        .arg("set")
-        .arg(tun_name)
-        .arg("down")
-        .status()
-    {
-        eprintln!("Failed to bring down interface: {:?}", e);
-        exit(1);
+    if ip.len() != 5 {
+        return;
     }
+
+    println!("{}: {:?}", tun_name, ip);
+    //set the interface address if provided, and bring up the interface
     if let Err(e) = Command::new("/sbin/ip")
         .arg("addr")
-        .arg("del")
-        .arg("need to know what this is") // TODO
+        .arg("add")
+        .arg(format!("{}.{}.{}.{}/{}", ip[0], ip[1], ip[2], ip[3], ip[4]))
         .arg("dev")
         .arg(tun_name)
         .status()
     {
-        eprintln!("Failed to bring down interface: {:?}", e);
-        exit(1);
-    }
-    if ip.len() > 0 {
-        if let Err(e) = Command::new("/sbin/ip")
-            .arg("addr")
-            .arg("add")
-            .arg(format!("{}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]))
-            .arg("dev")
-            .arg(tun_name)
-            .status()
-        {
-            eprintln!("Failed to add interface address: {:?}", e);
-            exit(1)
-        }
-        if let Err(e) = Command::new("/sbin/ip")
-            .arg("link")
-            .arg("set")
-            .arg(tun_name)
-            .arg("up")
-            .status()
-        {
-            eprintln!("Failed to bring up interface: {:?}", e);
-            exit(1);
-        }
+        eprintln!("Failed to add interface address: {:?}", e);
+        exit(1)
     }
 }

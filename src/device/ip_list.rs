@@ -59,13 +59,11 @@ impl IpList {
 
             let ip = list[self.index.get()];
             ip_avail = !allocated.contains_key(&ip);
-            if !ip_avail {
-                self.index.set(current + 1);
-                counter += 1;
-            }
+            counter += 1;
+            self.index.set(current + 1);
         }
 
-        return Some(list[self.index.get()]);
+        return Some(list[self.index.get()-1]);
     }
 
     pub fn allocate(&mut self, ip: [u8; 5]) {
