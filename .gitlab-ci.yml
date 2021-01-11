@@ -49,7 +49,6 @@ build:
     - source $HOME/.cargo/env
     - rustup toolchain install stable --allow-downgrade --profile minimal --component clippy
     - cargo build --"${BUILD_TARGET}" -j "${BUILD_THREADS}" --target "${BUILD_TOOLCHAIN}"
-    - ls -alh
     artifacts:
         paths:
         - ./target/${BUILD_TOOLCHAIN}/${BUILD_TARGET}/${CI_PROJECT_NAME}
