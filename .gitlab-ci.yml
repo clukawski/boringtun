@@ -37,6 +37,7 @@ variables:
   NEXUS_FILE_NAME: "$CI_PROJECT_TITLE"
   BUILD_THREADS: "8"
   BUILD_TARGET: "release" # or debug
+  BUILD_TOOLCHAIN: "x86_64-unknown-linux-musl"
   #NEXUS_USERNAME: "sample"
   #NEXUS_PASSWORD: "VhVvMiM3jD04c"
 
@@ -47,11 +48,11 @@ build:
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain none -y
     - source $HOME/.cargo/env
     - rustup toolchain install stable --allow-downgrade --profile minimal --component clippy
-    - cargo build --"${BUILD_TARGET}" -j "${BUILD_THREADS}" --target x86_64-unknown-linux-musl
+    - cargo build --"${BUILD_TARGET}" -j "${BUILD_THREADS}" --target "${BUILD_TOOLCHAIN}"
     - ls -alh
     artifacts:
         paths:
-        - target/${BUILD_TARGET}/${CI_PROJECT_NAME}
+        - ./target/${BUILD_TOOLCHAIN}/${BUILD_TARGET}/${CI_PROJECT_NAME}
 
 ##
 ## Artifact Upload [latest]
@@ -66,7 +67,7 @@ artifact-upload:latest:
   stage: Artifact Upload
   script:
   - DATE=$(date +%F)
-  - curl --silent --show-error --fail ./target/${BUILD_TARGET}/${CI_PROJECT_NAME} -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} "${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_LATEST}/${NEXUS_FILE_NAME}"
+  - curl --silent --show-error --fail ./target/${BUILD_TOOLCHAIN}/${BUILD_TARGET}/${CI_PROJECT_NAME} -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} "${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_LATEST}/${NEXUS_FILE_NAME}"
   - echo "Download Link ${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_LATEST}/${NEXUS_FILE_NAME}"
 
 ##
@@ -82,7 +83,7 @@ artifact-upload:branch:
   stage: Artifact Upload
   script:
   - DATE=$(date +%F)
-  - curl --silent --show-error --fail ./target/${BUILD_TARGET}/${CI_PROJECT_NAME} -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} "${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_BRANCHES}/${CI_COMMIT_BRANCH}/${DATE}/${CI_COMMIT_SHORT_SHA}/${NEXUS_FILE_NAME}"
+  - curl --silent --show-error --fail ./target/${BUILD_TOOLCHAIN}/${BUILD_TARGET}/${CI_PROJECT_NAME} -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} "${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_BRANCHES}/${CI_COMMIT_BRANCH}/${DATE}/${CI_COMMIT_SHORT_SHA}/${NEXUS_FILE_NAME}"
   - echo "Download Link ${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_BRANCHES}/${CI_COMMIT_BRANCH}/${DATE}/${CI_COMMIT_SHORT_SHA}/${NEXUS_FILE_NAME}"
   only:
   - branches
@@ -99,7 +100,7 @@ artifact-upload:tag:
   only:
   - tags
   script:
-  - curl --silent --show-error --fail ./target/${BUILD_TARGET}/${CI_PROJECT_NAME} -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} "${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_TAGS}/${CI_COMMIT_TAG}/${NEXUS_FILE_NAME}"
+  - curl --silent --show-error --fail ./target/${BUILD_TOOLCHAIN}/${BUILD_TARGET}/${CI_PROJECT_NAME} -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} "${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_TAGS}/${CI_COMMIT_TAG}/${NEXUS_FILE_NAME}"
   - echo "Download Link ${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_TAGS}/${CI_COMMIT_TAG}/${NEXUS_FILE_NAME}"
 
 #release:production:
