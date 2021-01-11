@@ -1,0 +1,108 @@
+---
+image: rust:alpine
+
+### Requirements:
+### - Variables Set:        ${NEXUS_USERNAME}       - Username for Nexus
+###                         ${NEXUS_PASSWORD}       - Password for Nexus
+###                         ${NEXUS_BASEURL}        - Base URL for Nexus
+###                         ${NEXUS_PATH_ROOT}      - Root Path for Project
+###                         ${NEXUS_PATH_LATEST}    - Latest Sub-folder Path
+###                         ${NEXUS_PATH_BRANCHES}  - Branches Sub-Folder Path
+###                         ${NEXUS_PATH_TAGS}      - Tags Sub-Folder Path
+###                         ${NEXUS_FILE_NAME}      - Artifact file-name
+### - Other variables Used: DATE=$(date +%F)
+### - Nexus account permissions: write to ${NEXUS_PATH_ROOT}
+
+### Three Stages Sample Pipeline:
+### - Build
+### - Artifact Upload (branches, tags and latest)
+### - Release (detailed release work)
+
+stages:
+- Build
+- Artifact Upload
+- Release
+
+## Import environment variables from project CI (comment respective vars below if this is in use!)
+before_script:
+  - source .vars.env
+
+## Define variables (if not set in project CI, set here!)
+variables:
+  NEXUS_BASEURL: "https://nexus.int.windscribe.com"
+  NEXUS_PATH_ROOT: "/repository/$CI_PROJECT_NAME/$CI_PROJECT_NAME"
+  NEXUS_PATH_LATEST: "/latest"
+  NEXUS_PATH_BRANCHES: "/branches"
+  NEXUS_PATH_TAGS: "/tags"
+  NEXUS_FILE_NAME: "$CI_PROJECT_TITLE"
+  BUILD_THREADS: "8"
+  #NEXUS_USERNAME: "sample"
+  #NEXUS_PASSWORD: "VhVvMiM3jD04c"
+
+build:
+    stage: Build
+    script:
+    - cargo build --release -j ${BUILD_THREADS} --target x86_64-unknown-linux-musl
+    artifacts:
+        paths:
+        - ${CI_PROJECT_NAME}
+
+##
+## Artifact Upload [latest]
+##
+## Upload build artifacts regardless of tag or branch to latest path (human convenience)
+##
+## URL Templated : ${NEXUS_BASEURL}${NEXUS_PATH_ROOT}/${NEXUS_PATH_LATEST}/${NEXUS_FILE_NAME}
+## URL Example   : https://nexus.int.windscribe.com/repository/sample-go-project/sample-go-project/latest/sample-go-project
+##
+
+artifact-upload:latest:
+  stage: Artifact Upload
+  script:
+  - DATE=$(date +%F)
+  - curl --silent --show-error --fail --upload-file ${CI_PROJECT_NAME} -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} "${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_LATEST}/${NEXUS_FILE_NAME}"
+  - echo "Download Link ${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_LATEST}/${NEXUS_FILE_NAME}"
+
+##
+## Artifact Upload [branch]
+##
+## Upload build artifacts from specific branches into a branch subfolder with date and commit sha
+##
+## URL (Templated) : ${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_BRANCHES}/${CI_COMMIT_BRANCH}/${DATE}/${CI_COMMIT_SHORT_SHA}/${ARTIFACTS}
+## URL (Example)   : https://nexus.int.windscribe.com/repository/sample-go-project/sample-go-project/branches/master/2020-04-20/5785a403/sample-go-project
+##
+
+artifact-upload:branch:
+  stage: Artifact Upload
+  script:
+  - DATE=$(date +%F)
+  - curl --silent --show-error --fail --upload-file ${CI_PROJECT_NAME} -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} "${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_BRANCHES}/${CI_COMMIT_BRANCH}/${DATE}/${CI_COMMIT_SHORT_SHA}/${NEXUS_FILE_NAME}"
+  - echo "Download Link ${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_BRANCHES}/${CI_COMMIT_BRANCH}/${DATE}/${CI_COMMIT_SHORT_SHA}/${NEXUS_FILE_NAME}"
+  only:
+  - branches
+
+## Artifact Upload [tag]
+##
+## Upload build artifacts from specific tags into tag subfolder
+##
+## URL (Templated) : ${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_TAGS}/${CI_COMMIT_TAG}/${NEXUS_FILE_NAME}
+## URL (Example)   : https://nexus.int.windscribe.com/repository/sample-go-project/sample-go-project/tags/v1.2.3/sample-go-project
+
+artifact-upload:tag:
+  stage: Artifact Upload
+  only:
+  - tags
+  script:
+  - curl --silent --show-error --fail --upload-file ${CI_PROJECT_NAME} -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} "${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_TAGS}/${CI_COMMIT_TAG}/${NEXUS_FILE_NAME}"
+  - echo "Download Link ${NEXUS_BASEURL}${NEXUS_PATH_ROOT}${NEXUS_PATH_TAGS}/${CI_COMMIT_TAG}/${NEXUS_FILE_NAME}"
+
+#release:production:
+#  stage: Release
+#  only:
+#  - tags
+#  script:
+#  - echo 'Perform some work here for production release'
+#  - echo 'Examples'
+#  - echo ' * SCP files to a server'
+#  - echo ' * SSH into a server and curl a file'
+#  - echo ' * etc...'
