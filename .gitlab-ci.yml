@@ -47,7 +47,7 @@ build:
     - apk add gcc g++ make curl
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain none -y
     - source $HOME/.cargo/env
-    - rustup toolchain install stable --allow-downgrade --profile minimal --component clippy
+    - rustup toolchain install stable --allow-downgrade --profile minimal
     - cargo build --"${BUILD_TARGET}" -j "${BUILD_THREADS}" --target "${BUILD_TOOLCHAIN}"
     artifacts:
         paths:
