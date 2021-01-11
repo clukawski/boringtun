@@ -43,7 +43,8 @@ variables:
 build:
     stage: Build
     script:
-    - apk add gcc
+    - apk add musl-gcc
+    - export CC=cc
     - cargo build --release -j ${BUILD_THREADS} --target x86_64-unknown-linux-musl
     artifacts:
         paths:
