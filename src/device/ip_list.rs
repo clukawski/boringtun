@@ -63,7 +63,7 @@ impl IpList {
             self.index.set(current + 1);
         }
 
-        return Some(list[self.index.get()-1]);
+        return Some(list[self.index.get() - 1]);
     }
 
     pub fn allocate(&mut self, ip: [u8; 5]) {

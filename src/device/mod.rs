@@ -967,6 +967,11 @@ fn setup_interface(ip: &[u8], tun_name: &str) {
         return;
     }
 
+    if ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0 && ip[4] == 0 {
+        eprintln!("Failed to get address from server peer: {:?}", ip);
+        exit(1);
+    }
+
     println!("{}: {:?}", tun_name, ip);
     //set the interface address if provided, and bring up the interface
     if let Err(e) = Command::new("/sbin/ip")
