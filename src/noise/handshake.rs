@@ -8,6 +8,7 @@ use crate::crypto::x25519::{X25519PublicKey, X25519SecretKey};
 use crate::noise::errors::WireGuardError;
 use crate::noise::make_array;
 use crate::noise::session::Session;
+use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -263,6 +264,11 @@ impl NoiseParams {
         self.static_shared = self.static_private.shared_key(&self.peer_static_public)?;
         Ok(())
     }
+
+    /// Set a new private key
+    fn get_static_public(&self) -> Arc<X25519PublicKey> {
+        self.static_public.clone()
+    }
 }
 
 impl Handshake {
@@ -292,6 +298,13 @@ impl Handshake {
             last_rtt: None,
             assigned_ip: assigned_ip,
         })
+    }
+
+    pub(crate) fn get_static_public(&self) -> [u8; 32] {
+        let static_public = self.params.get_static_public().clone();
+        <&[u8; 32]>::try_from(static_public.as_bytes())
+            .unwrap()
+            .clone()
     }
 
     pub(crate) fn is_in_progress(&self) -> bool {

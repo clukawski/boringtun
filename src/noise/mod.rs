@@ -352,7 +352,12 @@ impl Tunn {
         } else {
             ip.set(assigned_ip);
             if let Some(_) = self.ip_list {
-                self.ip_list.clone().unwrap().lock().allocate(assigned_ip);
+                let handshake = self.handshake.lock();
+                self.ip_list
+                    .clone()
+                    .unwrap()
+                    .lock()
+                    .allocate(assigned_ip, handshake.get_static_public());
             }
         }
 

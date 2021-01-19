@@ -32,6 +32,7 @@ pub mod udp;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::convert::From;
+use std::convert::TryFrom;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::os::unix::io::AsRawFd;
@@ -323,8 +324,13 @@ impl<T: Tun, S: Sock> Device<T, S> {
         if let Some(peer_data) = self.peers.get(pub_key.clone()) {
             println!("removing peer tunnel {:?}", peer_data.get_assigned_ip(),);
             let peer_ip = peer_data.get_assigned_ip();
+            let static_public: [u8; 32] =
+                <&[u8; 32]>::try_from(pub_key.as_bytes()).unwrap().clone();
             match &self.config.ip_list {
-                Some(list) => list.clone().lock().deallocate(peer_ip.clone()),
+                Some(list) => list
+                    .clone()
+                    .lock()
+                    .deallocate(peer_ip.clone(), static_public),
                 None => {}
             }
         }
