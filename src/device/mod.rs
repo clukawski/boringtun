@@ -734,12 +734,12 @@ impl<T: Tun, S: Sock> Device<T, S> {
                         if let Ok(sock) = peer.connect_endpoint(d.listen_port, d.fwmark) {
                             d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
                                 .unwrap();
-                            // Setup network if we have the ip from the handshake response
+
+                            // If we have the interface name and this is a handshake response, set up the new interface address
                             if let Some(t) = &d.config.tun_name {
                                 if handshake_resp {
                                     let tun_aip = peer.tunnel.assigned_ip.lock();
                                     let assigned_ip = tun_aip.get();
-                                    println! {"{:?}", assigned_ip};
                                     setup_interface(&assigned_ip, &t);
                                 }
                             }
@@ -973,13 +973,13 @@ fn setup_interface(ip: &[u8], tun_name: &str) {
         return;
     }
 
+    // If the ip range is exhausted, we'll get 0.0.0.0/0, and the client should quit
     if ip == [0, 0, 0, 0, 0] {
         eprintln!("Failed to get address from server peer: {:?}", ip);
         exit(1);
     }
 
-    println!("{}: {:?}", tun_name, ip);
-    //set the interface address if provided, and bring up the interface
+    // Set the interface address if provided, additional configuration will be done externally
     if let Err(e) = Command::new("/sbin/ip")
         .arg("addr")
         .arg("add")
