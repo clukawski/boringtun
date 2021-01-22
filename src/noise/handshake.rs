@@ -266,8 +266,8 @@ impl NoiseParams {
     }
 
     /// Set a new private key
-    fn get_static_public(&self) -> Arc<X25519PublicKey> {
-        self.static_public.clone()
+    fn get_peer_static_public(&self) -> Arc<X25519PublicKey> {
+        self.peer_static_public.clone()
     }
 }
 
@@ -300,8 +300,8 @@ impl Handshake {
         })
     }
 
-    pub(crate) fn get_static_public(&self) -> [u8; 32] {
-        let static_public = self.params.get_static_public().clone();
+    pub(crate) fn get_peer_static_public(&self) -> [u8; 32] {
+        let static_public = self.params.get_peer_static_public().clone();
         <&[u8; 32]>::try_from(static_public.as_bytes())
             .unwrap()
             .clone()

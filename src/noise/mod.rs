@@ -350,7 +350,7 @@ impl Tunn {
                     .clone()
                     .unwrap()
                     .lock()
-                    .allocate(assigned_ip, handshake.get_static_public());
+                    .allocate(assigned_ip, handshake.get_peer_static_public());
             }
         }
 
