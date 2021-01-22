@@ -342,14 +342,7 @@ impl Tunn {
         *self.sessions[index % N_SESSIONS].write() = Some(session);
 
         let ip = self.assigned_ip.lock();
-        if assigned_ip[0] == 0
-            && assigned_ip[1] == 0
-            && assigned_ip[2] == 0
-            && assigned_ip[3] == 0
-            && assigned_ip[4] == 0
-        {
-            println!("not setting IP, follow up handshake")
-        } else {
+        if assigned_ip != [0, 0, 0, 0, 0] {
             ip.set(assigned_ip);
             if let Some(_) = self.ip_list {
                 let handshake = self.handshake.lock();

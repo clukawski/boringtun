@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::vec::Vec;
 
+// IpList contains a list of IPs and allocation data
 pub struct IpList {
     pub list: RefCell<Vec<[u8; 5]>>,
     pub allocated: Cell<HashMap<[u8; 5], bool>>,
@@ -24,6 +25,7 @@ impl IpList {
         let mut ip_list: Vec<[u8; 5]> = Vec::new();
         for ip in net.iter() {
             let octets = ip.octets();
+            // Ensure only valid addresses are enumerated
             if octets[3] == 255 || octets[3] == 0 {
                 continue;
             }
@@ -57,6 +59,7 @@ impl IpList {
             }
             current = self.index.get();
             if counter == list.len() {
+                // If we've cycled through the list without finding a free IP, return one
                 return None;
             }
 

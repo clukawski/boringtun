@@ -973,7 +973,7 @@ fn setup_interface(ip: &[u8], tun_name: &str) {
         return;
     }
 
-    if ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0 && ip[4] == 0 {
+    if ip == [0, 0, 0, 0, 0] {
         eprintln!("Failed to get address from server peer: {:?}", ip);
         exit(1);
     }
