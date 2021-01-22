@@ -300,6 +300,8 @@ impl Handshake {
         })
     }
 
+    // get_peer_static_public returns the public key of the peer that initiated the handshake
+    // This is used to create a peer -> IP mapping until it is deallocated to prevent a restarting peer instance exhausting the IP space
     pub(crate) fn get_peer_static_public(&self) -> [u8; 32] {
         let static_public = self.params.get_peer_static_public().clone();
         <&[u8; 32]>::try_from(static_public.as_bytes())
@@ -491,11 +493,13 @@ impl Handshake {
         hash = HASH!(hash, temp2);
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         OPEN!([], key, 0, packet.encrypted_nothing, hash)?;
+
+        // By default, an assigned IP of 0.0.0.0/0 will be invalid and the client
+        // will exit (if this value is unchanged)
         let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
 
-        // Get assigned ip
+        // Get assigned ip from handshake response
         OPEN!(assigned_ip, key, 0, packet.arbitrary_payload, hash)?;
-        // assigned_ip.copy_from_slice(&packet.arbitrary_payload);
 
         // responder.hash = HASH(responder.hash || msg.encrypted_nothing)
         // hash = HASH!(hash, buf[ENC_NOTHING_OFF..ENC_NOTHING_OFF + ENC_NOTHING_SZ]);
@@ -520,6 +524,9 @@ impl Handshake {
         } else {
             self.state = HandshakeState::None;
         }
+
+        // The assigned IP is passed through the session value so it can be assigned
+        // to the Tunn struct (and accessed by the Peer stuct)
         Ok(Session::new(
             local_index,
             peer_index,
