@@ -9,6 +9,7 @@ use crate::noise::errors::WireGuardError;
 use crate::noise::make_array;
 use crate::noise::session::Session;
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -762,6 +763,8 @@ impl Handshake {
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
+        let endpoints = [[1, 2, 3, 1], [1, 2, 3, 2], [1, 2, 3, 3], [1, 2, 3, 4]];
+
         // Seal assigned IP
         SEAL!(arbitrary_data, key, 0, self.assigned_ip, hash);
 
@@ -793,4 +796,21 @@ impl Handshake {
             ),
         ))
     }
+}
+
+fn endpoints() {
+    let x = [
+        10, 100, 0, 4, 10, 1, 2, 3, 1, 1, 2, 3, 2, 1, 2, 3, 3, 0, 0, 0, 0,
+    ];
+    let ip: [u8; 5] = x[..5].try_into().unwrap();
+    let mut endpoints = Vec::new();
+    let endpoints_data: [u8; 16] = x[5..].try_into().unwrap();
+    for i in 1..5 {
+        let marker = i * 4;
+        let start = marker - 4;
+        let endpoint: [u8; 4] = endpoints_data[start..marker].try_into().unwrap();
+        endpoints.push(endpoint);
+        println!("[{}..{}]: {:?}", start, marker, endpoint);
+    }
+    println!("{:?}, {:?}", ip, endpoints);
 }
