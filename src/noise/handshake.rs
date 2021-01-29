@@ -497,7 +497,8 @@ impl Handshake {
 
         // By default, an assigned IP of 0.0.0.0/0 will be invalid and the client
         // will exit (if this value is unchanged)
-        let mut arb_payload: [u8; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ];
+        let mut arb_payload: [u8; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ] =
+            [0; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ];
 
         // Get assigned ip from handshake response
         OPEN!(arb_payload, key, 0, packet.arbitrary_payload, hash)?;
@@ -533,7 +534,7 @@ impl Handshake {
             peer_index,
             temp3,
             temp2,
-            assigned_ip,
+            arb_decapsulate(arb_payload),
         ))
     }
 
@@ -763,10 +764,16 @@ impl Handshake {
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
-        let peer_endpoints = [1, 2, 3, 1, 1, 2, 3, 2, 1, 2, 3, 3, 0, 0, 0, 0];
+        let mut arb_data_vec = self.assigned_ip.to_vec();
+        let peer_endpoints: [u8; super::HANDSHAKE_ENDPOINTS_SZ] =
+            [1, 2, 3, 1, 1, 2, 3, 2, 1, 2, 3, 3, 0, 0, 0, 0];
+        let endpoints_vec = peer_endpoints.to_vec();
+
+        arb_data_vec.extend_from_slice(&endpoints_vec);
+        let arb_data_concat = arb_data_vec.as_slice();
 
         // Seal assigned IP
-        SEAL!(arbitrary_data, key, 0, self.assigned_ip, hash);
+        SEAL!(arbitrary_data, key, 0, arb_data_concat, hash);
 
         // Derive keys
         // temp1 = HMAC(initiator.chaining_key, [empty])
@@ -785,20 +792,19 @@ impl Handshake {
             &mut dst[..super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ],
         )?;
 
+        let arb_data = super::HandshakeArbData {
+            endpoints: None,
+            assigned_ip: self.assigned_ip.clone(),
+        };
+
         Ok((
             dst,
-            Session::new(
-                local_index,
-                peer_index,
-                temp2,
-                temp3,
-                self.assigned_ip.clone(),
-            ),
+            Session::new(local_index, peer_index, temp2, temp3, arb_data),
         ))
     }
 }
 
-fn arb_decapsulate(data: &[u8]) -> ([u8; 5], Vec<[u8; 4]>) {
+fn arb_decapsulate(data: [u8; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ]) -> super::HandshakeArbData {
     let ip: [u8; 5] = data[..5].try_into().unwrap();
     let mut endpoints = Vec::new();
     let endpoints_data: [u8; super::HANDSHAKE_ENDPOINTS_SZ] = data[5..].try_into().unwrap();
@@ -811,5 +817,11 @@ fn arb_decapsulate(data: &[u8]) -> ([u8; 5], Vec<[u8; 4]>) {
         }
         endpoints.push(endpoint);
     }
-    (ip, endpoints)
+    let endpoints_array: super::HandshakeEndpoints = endpoints.try_into().unwrap();
+
+    let arb_data = super::HandshakeArbData {
+        endpoints: Some(endpoints_array),
+        assigned_ip: ip,
+    };
+    arb_data
 }

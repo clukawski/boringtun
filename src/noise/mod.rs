@@ -99,6 +99,14 @@ const HANDSHAKE_ARB_DATA_UNPACKED_SZ: usize = 4 * HANDSHAKE_NUM_ENDPOINTS + 5;
 // pattern matching in Tunn::parse_incoming_packet)
 const HANDSHAKE_RESP_ARB_SZ: usize = HANDSHAKE_RESP_SZ + HANDSHAKE_ARB_DATA_SZ;
 
+type HandshakeEndpoints = [[u8; 4]; HANDSHAKE_ENDPOINTS_SZ];
+
+#[derive(Debug)]
+pub struct HandshakeArbData {
+    pub endpoints: Option<HandshakeEndpoints>,
+    pub assigned_ip: [u8; 5],
+}
+
 #[derive(Debug)]
 pub struct HandshakeInit<'a> {
     sender_idx: u32,
@@ -341,7 +349,7 @@ impl Tunn {
             handshake.receive_handshake_initialization(p, dst)?
         };
         let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
-        assigned_ip.copy_from_slice(&session.assigned_ip);
+        assigned_ip.copy_from_slice(&session.arb_data.assigned_ip);
 
         // Store new session in ring buffer
         let index = session.local_index();
@@ -381,7 +389,8 @@ impl Tunn {
             handshake.receive_handshake_response(p)?
         };
         let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
-        assigned_ip.copy_from_slice(&session.assigned_ip);
+        assigned_ip.copy_from_slice(&session.arb_data.assigned_ip);
+
         let keepalive_packet = session.format_packet_data(&[], dst);
         // Store new session in ring buffer
         let l_idx = session.local_index();
