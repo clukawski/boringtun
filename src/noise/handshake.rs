@@ -497,10 +497,10 @@ impl Handshake {
 
         // By default, an assigned IP of 0.0.0.0/0 will be invalid and the client
         // will exit (if this value is unchanged)
-        let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
+        let mut arb_payload: [u8; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ];
 
         // Get assigned ip from handshake response
-        OPEN!(assigned_ip, key, 0, packet.arbitrary_payload, hash)?;
+        OPEN!(arb_payload, key, 0, packet.arbitrary_payload, hash)?;
 
         // responder.hash = HASH(responder.hash || msg.encrypted_nothing)
         // hash = HASH!(hash, buf[ENC_NOTHING_OFF..ENC_NOTHING_OFF + ENC_NOTHING_SZ]);
@@ -798,7 +798,7 @@ impl Handshake {
     }
 }
 
-fn endpoints(data: &[u8]) {
+fn arb_decapsulate(data: &[u8]) -> ([u8; 5], Vec<[u8; 4]>) {
     let ip: [u8; 5] = data[..5].try_into().unwrap();
     let mut endpoints = Vec::new();
     let endpoints_data: [u8; super::HANDSHAKE_ENDPOINTS_SZ] = data[5..].try_into().unwrap();
@@ -810,7 +810,6 @@ fn endpoints(data: &[u8]) {
             break;
         }
         endpoints.push(endpoint);
-        println!("[{}..{}]: {:?}", start, marker, endpoint);
     }
-    println!("{:?}, {:?}", ip, endpoints);
+    (ip, endpoints)
 }

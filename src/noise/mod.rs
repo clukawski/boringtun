@@ -94,6 +94,7 @@ const HANDSHAKE_ENDPOINTS_SZ: usize = 4 * HANDSHAKE_NUM_ENDPOINTS;
 // Size of arbitrary data to append to handshake response
 // This is the size of your data + 16 bytes
 const HANDSHAKE_ARB_DATA_SZ: usize = 4 * HANDSHAKE_NUM_ENDPOINTS + 5 + 16;
+const HANDSHAKE_ARB_DATA_UNPACKED_SZ: usize = 4 * HANDSHAKE_NUM_ENDPOINTS + 5;
 // Size of the handshake response + arbritrary data (used in packet
 // pattern matching in Tunn::parse_incoming_packet)
 const HANDSHAKE_RESP_ARB_SZ: usize = HANDSHAKE_RESP_SZ + HANDSHAKE_ARB_DATA_SZ;
