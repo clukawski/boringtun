@@ -394,7 +394,14 @@ impl<T: Tun, S: Sock> Device<T, S> {
             tunn.set_logger(peer_logger);
         }
 
-        let peer = Peer::new(tunn, next_index, endpoint, &allowed_ips, preshared_key);
+        let peer = Peer::new(
+            tunn,
+            next_index,
+            endpoint,
+            None,
+            &allowed_ips,
+            preshared_key,
+        );
 
         let peer = Arc::new(peer);
         self.peers.insert(pub_key, Arc::clone(&peer));

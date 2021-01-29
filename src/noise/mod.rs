@@ -69,6 +69,7 @@ pub struct Tunn {
     tx_bytes: AtomicUsize,
     rx_bytes: AtomicUsize,
     pub assigned_ip: Mutex<Cell<[u8; 5]>>,
+    pub endpoints: Option<Mutex<Cell<HandshakeEndpoints>>>,
     ip_list: Option<Arc<Mutex<IpList>>>,
 
     rate_limiter: Arc<RateLimiter>,
@@ -101,7 +102,7 @@ const HANDSHAKE_RESP_ARB_SZ: usize = HANDSHAKE_RESP_SZ + HANDSHAKE_ARB_DATA_SZ;
 
 type HandshakeEndpoints = [[u8; 4]; HANDSHAKE_ENDPOINTS_SZ];
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HandshakeArbData {
     pub endpoints: Option<HandshakeEndpoints>,
     pub assigned_ip: [u8; 5],
@@ -196,6 +197,7 @@ impl Tunn {
                 Arc::new(RateLimiter::new(&static_public, PEER_HANDSHAKE_RATE_LIMIT))
             }),
             assigned_ip: Mutex::new(Cell::new(tunn_ip)),
+            endpoints: None,
             ip_list: ip_list.clone(),
         };
 
@@ -350,6 +352,7 @@ impl Tunn {
         };
         let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
         assigned_ip.copy_from_slice(&session.arb_data.assigned_ip);
+        let arb_data = &session.arb_data.clone();
 
         // Store new session in ring buffer
         let index = session.local_index();
@@ -358,6 +361,13 @@ impl Tunn {
         let ip = self.assigned_ip.lock();
         if assigned_ip != [0, 0, 0, 0, 0] {
             ip.set(assigned_ip);
+            if let Some(e) = &self.endpoints {
+                let endpoints = e.lock();
+                if let Some(session_endpoints) = arb_data.endpoints {
+                    endpoints.set(session_endpoints.clone());
+                }
+            }
+
             if let Some(_) = self.ip_list {
                 let handshake = self.handshake.lock();
                 self.ip_list

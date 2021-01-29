@@ -18,6 +18,7 @@ pub struct Peer<S: Sock> {
     pub(crate) tunnel: Box<Tunn>, // The associated tunnel struct
     index: u32,                   // The index the tunnel uses
     endpoint: RwLock<Endpoint<S>>,
+    endpoints: Vec<RwLock<Endpoint<S>>>,
     allowed_ips: AllowedIps<()>,
     preshared_key: Option<[u8; 32]>,
     pub assigned_ip: Mutex<Cell<[u8; 5]>>,
@@ -52,9 +53,20 @@ impl<S: Sock> Peer<S> {
         tunnel: Box<Tunn>,
         index: u32,
         endpoint: Option<SocketAddr>,
+        endpoints: Option<Vec<SocketAddr>>,
         allowed_ips: &[AllowedIP],
         preshared_key: Option<[u8; 32]>,
     ) -> Peer<S> {
+        let mut endpoints_vec = Vec::new();
+        if let Some(e) = endpoints {
+            for endpoint in e {
+                endpoints_vec.push(RwLock::new(Endpoint {
+                    addr: Some(endpoint),
+                    conn: None,
+                }));
+            }
+        }
+
         Peer {
             tunnel,
             index,
@@ -62,6 +74,7 @@ impl<S: Sock> Peer<S> {
                 addr: endpoint,
                 conn: None,
             }),
+            endpoints: endpoints_vec,
             allowed_ips: allowed_ips.iter().collect(),
             preshared_key,
             assigned_ip: Mutex::new(Cell::new([0, 0, 0, 0, 0])),
