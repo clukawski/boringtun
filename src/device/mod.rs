@@ -175,6 +175,8 @@ pub struct Device<T: Tun, S: Sock> {
     iface: Arc<T>,
     udp4: Option<Arc<S>>,
     udp6: Option<Arc<S>>,
+    udp4_2: Option<Arc<S>>,
+    udp6_2: Option<Arc<S>>,
 
     yield_notice: Option<EventRef>,
     exit_notice: Option<EventRef>,
@@ -468,6 +470,11 @@ impl<T: Tun, S: Sock> Device<T, S> {
             self.queue.clear_event_by_fd(s.as_raw_fd());
             Some(())
         });
+        self.udp4_2.take().and_then(|s| unsafe {
+            // This is safe because the event loop is not running yet
+            self.queue.clear_event_by_fd(s.as_raw_fd());
+            Some(())
+        });
 
         self.udp6.take().and_then(|s| unsafe {
             self.queue.clear_event_by_fd(s.as_raw_fd());
@@ -476,10 +483,12 @@ impl<T: Tun, S: Sock> Device<T, S> {
 
         for peer in self.peers.values() {
             peer.shutdown_endpoint();
+            peer.shutdown_endpoint2();
         }
 
         // Then open new sockets and bind to the port
         let udp_sock4 = Arc::new(S::new()?.set_non_blocking()?.set_reuse()?.bind(port)?);
+        let udp_sock4_2 = Arc::new(S::new()?.set_non_blocking()?.set_reuse()?.bind(port)?);
 
         if port == 0 {
             // Random port was assigned
@@ -489,8 +498,10 @@ impl<T: Tun, S: Sock> Device<T, S> {
         let udp_sock6 = Arc::new(S::new6()?.set_non_blocking()?.set_reuse()?.bind(port)?);
 
         self.register_udp_handler(Arc::clone(&udp_sock4))?;
+        self.register_udp_handler(Arc::clone(&udp_sock4_2))?;
         self.register_udp_handler(Arc::clone(&udp_sock6))?;
         self.udp4 = Some(udp_sock4);
+        self.udp4_2 = Some(udp_sock4_2);
         self.udp6 = Some(udp_sock6);
 
         self.listen_port = port;
@@ -549,6 +560,9 @@ impl<T: Tun, S: Sock> Device<T, S> {
         // Then on all currently connected sockets
         for peer in self.peers.values() {
             if let Some(ref sock) = peer.endpoint().conn {
+                sock.set_fwmark(mark)?
+            }
+            if let Some(ref sock) = peer.endpoint2().conn {
                 sock.set_fwmark(mark)?
             }
         }
@@ -610,6 +624,43 @@ impl<T: Tun, S: Sock> Device<T, S> {
                         TunnResult::Done => {}
                         TunnResult::Err(WireGuardError::ConnectionExpired) => {
                             peer.shutdown_endpoint(); // close open udp socket
+                        }
+                        TunnResult::Err(e) => error!(d.config.logger, "Timer error {:?}", e),
+                        TunnResult::WriteToNetwork(packet) => {
+                            match endpoint_addr {
+                                SocketAddr::V4(_) => udp4.sendto(packet, endpoint_addr),
+                                SocketAddr::V6(_) => udp6.sendto(packet, endpoint_addr),
+                            };
+                        }
+                        _ => panic!("Unexpected result from update_timers"),
+                    };
+                }
+                Action::Continue
+            }),
+            std::time::Duration::from_millis(250),
+        )?;
+
+        self.queue.new_periodic_event(
+            // Execute the timed function of every peer in the list
+            Box::new(|d, t| {
+                let peer_map = &d.peers;
+
+                let (udp4, udp6) = match (d.udp4_2.as_ref(), d.udp6_2.as_ref()) {
+                    (Some(udp4), Some(udp6)) => (udp4, udp6),
+                    _ => return Action::Continue,
+                };
+
+                // Go over each peer and invoke the timer function
+                for peer in peer_map.values() {
+                    let endpoint_addr = match peer.endpoint2().addr {
+                        Some(addr) => addr,
+                        None => continue,
+                    };
+
+                    match peer.update_timers(&mut t.dst_buf[..]) {
+                        TunnResult::Done => {}
+                        TunnResult::Err(WireGuardError::ConnectionExpired) => {
+                            peer.shutdown_endpoint2(); // close open udp socket
                         }
                         TunnResult::Err(e) => error!(d.config.logger, "Timer error {:?}", e),
                         TunnResult::WriteToNetwork(packet) => {

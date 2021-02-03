@@ -3,7 +3,7 @@
 
 use crate::device::*;
 use parking_lot::{Mutex, RwLock};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -18,7 +18,7 @@ pub struct Peer<S: Sock> {
     pub(crate) tunnel: Box<Tunn>, // The associated tunnel struct
     index: u32,                   // The index the tunnel uses
     endpoint: RwLock<Endpoint<S>>,
-    endpoints: Vec<RwLock<Endpoint<S>>>,
+    endpoint2: RwLock<Endpoint<S>>,
     allowed_ips: AllowedIps<()>,
     preshared_key: Option<[u8; 32]>,
     pub assigned_ip: Mutex<Cell<[u8; 5]>>,
@@ -57,15 +57,15 @@ impl<S: Sock> Peer<S> {
         allowed_ips: &[AllowedIP],
         preshared_key: Option<[u8; 32]>,
     ) -> Peer<S> {
-        let mut endpoints_vec = Vec::new();
-        if let Some(e) = endpoints {
-            for endpoint in e {
-                endpoints_vec.push(RwLock::new(Endpoint {
-                    addr: Some(endpoint),
-                    conn: None,
-                }));
-            }
-        }
+        // let mut endpoints_vec = Vec::new();
+        // if let Some(e) = endpoints {
+        //     for endpoint in e {
+        //         endpoints_vec.push(RwLock::new(Endpoint {
+        //             addr: Some(endpoint),
+        //             conn: None,
+        //         }));
+        //     }
+        // }
 
         Peer {
             tunnel,
@@ -74,7 +74,10 @@ impl<S: Sock> Peer<S> {
                 addr: endpoint,
                 conn: None,
             }),
-            endpoints: endpoints_vec,
+            endpoint2: RwLock::new(Endpoint {
+                addr: endpoint,
+                conn: None,
+            }),
             allowed_ips: allowed_ips.iter().collect(),
             preshared_key,
             assigned_ip: Mutex::new(Cell::new([0, 0, 0, 0, 0])),
@@ -118,6 +121,69 @@ impl<S: Sock> Peer<S> {
 
     pub fn connect_endpoint(&self, port: u16, fwmark: Option<u32>) -> Result<Arc<S>, Error> {
         let mut endpoint = self.endpoint.write();
+
+        if endpoint.conn.is_some() {
+            return Err(Error::Connect("Connected".to_owned()));
+        }
+
+        let udp_conn = Arc::new(match endpoint.addr {
+            Some(addr @ SocketAddr::V4(_)) => S::new()?
+                .set_non_blocking()?
+                .set_reuse()?
+                .bind(port)?
+                .connect(&addr)?,
+            Some(addr @ SocketAddr::V6(_)) => S::new6()?
+                .set_non_blocking()?
+                .set_reuse()?
+                .bind(port)?
+                .connect(&addr)?,
+            None => panic!("Attempt to connect to undefined endpoint"),
+        });
+
+        if let Some(fwmark) = fwmark {
+            udp_conn.set_fwmark(fwmark)?;
+        }
+
+        info!(
+            self.tunnel.logger,
+            "Connected endpoint :{}->{}",
+            port,
+            endpoint.addr.unwrap()
+        );
+
+        endpoint.conn = Some(Arc::clone(&udp_conn));
+
+        Ok(udp_conn)
+    }
+
+    pub fn endpoint2(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {
+        self.endpoint2.read()
+    }
+
+    pub fn shutdown_endpoint2(&self) {
+        if let Some(conn) = self.endpoint2.write().conn.take() {
+            info!(self.tunnel.logger, "Disconnecting from endpoint");
+            conn.shutdown();
+        }
+    }
+
+    pub fn set_endpoint2(&self, addr: SocketAddr) {
+        let mut endpoint = self.endpoint2.write();
+        if endpoint.addr != Some(addr) {
+            // We only need to update the endpoint if it differs from the current one
+            if let Some(conn) = endpoint.conn.take() {
+                conn.shutdown();
+            }
+
+            *endpoint = Endpoint {
+                addr: Some(addr),
+                conn: None,
+            }
+        };
+    }
+
+    pub fn connect_endpoint2(&self, port: u16, fwmark: Option<u32>) -> Result<Arc<S>, Error> {
+        let mut endpoint = self.endpoint2.write();
 
         if endpoint.conn.is_some() {
             return Err(Error::Connect("Connected".to_owned()));
