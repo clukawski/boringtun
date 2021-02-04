@@ -176,7 +176,6 @@ pub struct Device<T: Tun, S: Sock> {
     udp4: Option<Arc<S>>,
     udp6: Option<Arc<S>>,
     udp4_2: Option<Arc<S>>,
-    udp6_2: Option<Arc<S>>,
 
     yield_notice: Option<EventRef>,
     exit_notice: Option<EventRef>,
@@ -437,6 +436,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             peers_by_idx: Default::default(),
             peers_by_ip: Default::default(),
             udp4: Default::default(),
+            udp4_2: Default::default(),
             udp6: Default::default(),
             cleanup_paths: Default::default(),
             mtu: AtomicUsize::new(mtu),
@@ -645,7 +645,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             Box::new(|d, t| {
                 let peer_map = &d.peers;
 
-                let (udp4, udp6) = match (d.udp4_2.as_ref(), d.udp6_2.as_ref()) {
+                let (udp4, udp6) = match (d.udp4_2.as_ref(), d.udp6.as_ref()) {
                     (Some(udp4), Some(udp6)) => (udp4, udp6),
                     _ => return Action::Continue,
                 };
