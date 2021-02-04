@@ -921,7 +921,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
                         TunnResult::Done => {}
                         TunnResult::Err(e) => error!(d.config.logger, "Encapsulate error {:?}", e),
                         TunnResult::WriteToNetwork(packet) => {
-                            let endpoint = peer.endpoint();
+                            let endpoint = peer.endpoint_rand();
                             if let Some(ref conn) = endpoint.conn {
                                 // Prefer to send using the connected socket
                                 conn.write(packet);

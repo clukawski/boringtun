@@ -3,6 +3,7 @@
 
 use crate::device::*;
 use parking_lot::{Mutex, RwLock};
+use rand::Rng;
 use std::cell::{Cell, RefCell};
 use std::net::IpAddr;
 use std::net::SocketAddr;
@@ -158,6 +159,17 @@ impl<S: Sock> Peer<S> {
 
     pub fn endpoint2(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {
         self.endpoint2.read()
+    }
+
+    pub fn endpoint_rand(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {
+        // This can use .choose() once we have a Vec of endpoints
+        let mut rng = rand::thread_rng();
+        let endpoint_select: u8 = rng.gen();
+        if endpoint_select == 0 {
+            return self.endpoint.read();
+        } else {
+            self.endpoint2.read()
+        }
     }
 
     pub fn shutdown_endpoint2(&self) {
