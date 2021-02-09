@@ -796,9 +796,14 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             // TODO: This whole conditional needs to be rewritten
                             if let Ok(sock2) = peer.connect_endpoint2(d.listen_port, d.fwmark) {
                                 // Setup our fixed second endpoint
-                                // TODO: with use_connected_socket we know the IP address but with the secondary endpoint we don't. Figure out how to do this
-                                d.register_conn_handler(Arc::clone(peer), sock2, ip_addr)
+                                if let Some(ip_addr_2) = peer.get_endpoint2() {
+                                    d.register_conn_handler(
+                                        Arc::clone(peer),
+                                        sock2,
+                                        ip_addr_2.ip(),
+                                    )
                                     .unwrap();
+                                }
                             }
 
                             // If we have the interface name and this is a handshake response, set up the new interface address
