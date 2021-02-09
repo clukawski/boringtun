@@ -161,11 +161,6 @@ impl<S: Sock> Peer<S> {
         self.endpoint2.read()
     }
 
-    pub fn get_endpoint2(&self) -> Option<SocketAddr> {
-        let endpoint = self.endpoint2.read();
-        endpoint.addr
-    }
-
     pub fn endpoint_rand(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {
         // This can use .choose() once we have a Vec of endpoints
         let mut rng = rand::thread_rng();
