@@ -4,9 +4,9 @@
 use crate::device::*;
 use parking_lot::{Mutex, RwLock};
 use rand::Rng;
-use std::cell::{Cell, RefCell};
-use std::net::IpAddr;
+use std::cell::Cell;
 use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 
 #[derive(Default, Debug)]
@@ -15,11 +15,19 @@ pub struct Endpoint<S: Sock> {
     pub conn: Option<Arc<S>>,
 }
 
+#[derive(Default, Debug)]
+pub struct MultiEndpoint<S: Sock> {
+    pub addr: Option<SocketAddr>,
+    pub conn: Option<Arc<S>>,
+    pub port: u16,
+}
+
 pub struct Peer<S: Sock> {
     pub(crate) tunnel: Box<Tunn>, // The associated tunnel struct
     index: u32,                   // The index the tunnel uses
     endpoint: RwLock<Endpoint<S>>,
     endpoint2: RwLock<Endpoint<S>>,
+    endpoints: Option<Vec<RwLock<MultiEndpoint<S>>>>,
     allowed_ips: AllowedIps<()>,
     preshared_key: Option<[u8; 32]>,
     pub assigned_ip: Mutex<Cell<[u8; 5]>>,
@@ -79,6 +87,7 @@ impl<S: Sock> Peer<S> {
                 addr: endpoint,
                 conn: None,
             }),
+            endpoints: None,
             allowed_ips: allowed_ips.iter().collect(),
             preshared_key,
             assigned_ip: Mutex::new(Cell::new([0, 0, 0, 0, 0])),
@@ -92,6 +101,23 @@ impl<S: Sock> Peer<S> {
     pub fn get_assigned_ip(&self) -> [u8; 5] {
         let assigned_ip = self.tunnel.assigned_ip.lock().get();
         return assigned_ip;
+    }
+
+    pub fn populate_endpoints(&mut self) {
+        let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 100, 0, 1)), 8080);
+        let socket2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 100, 0, 2)), 6969);
+        let sock_input_vec = vec![socket, socket2];
+        let mut endpoints: Vec<RwLock<MultiEndpoint<S>>> = Vec::new();
+
+        for addr in sock_input_vec {
+            let endpoint = MultiEndpoint {
+                addr: Some(addr),
+                conn: None,
+                port: 0,
+            };
+            endpoints.push(RwLock::new(endpoint));
+        }
+        self.endpoints = Some(endpoints);
     }
 
     pub fn endpoint(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {
