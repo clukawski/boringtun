@@ -220,41 +220,39 @@ impl<S: Sock> Peer<S> {
         };
     }
 
-    pub fn connect_endpoint2(&self, port: u16, fwmark: Option<u32>) -> Result<Arc<S>, Error> {
-        let mut endpoint = self.endpoint2.write();
+    pub fn connect_endpoints(&self, port: u16, fwmark: Option<u32>) -> Result<(), Error> {
+        let mut endpoints = self.endpoints.unwrap();
+        for e in endpoints {
+            let mut endpoint = e.write();
+            let udp_conn = Arc::new(match endpoint.addr {
+                Some(addr @ SocketAddr::V4(_)) => S::new()?
+                    .set_non_blocking()?
+                    .set_reuse()?
+                    .bind(port)?
+                    .connect(&addr)?,
+                Some(addr @ SocketAddr::V6(_)) => S::new6()?
+                    .set_non_blocking()?
+                    .set_reuse()?
+                    .bind(port)?
+                    .connect(&addr)?,
+                None => panic!("Attempt to connect to undefined endpoint"),
+            });
 
-        if endpoint.conn.is_some() {
-            return Err(Error::Connect("Connected".to_owned()));
+            if let Some(fwmark) = fwmark {
+                udp_conn.set_fwmark(fwmark)?;
+            }
+
+            info!(
+                self.tunnel.logger,
+                "Connected endpoint :{}->{}",
+                port,
+                endpoint.addr.unwrap()
+            );
+
+            endpoint.conn = Some(Arc::clone(&udp_conn));
         }
 
-        let udp_conn = Arc::new(match endpoint.addr {
-            Some(addr @ SocketAddr::V4(_)) => S::new()?
-                .set_non_blocking()?
-                .set_reuse()?
-                .bind(port)?
-                .connect(&addr)?,
-            Some(addr @ SocketAddr::V6(_)) => S::new6()?
-                .set_non_blocking()?
-                .set_reuse()?
-                .bind(port)?
-                .connect(&addr)?,
-            None => panic!("Attempt to connect to undefined endpoint"),
-        });
-
-        if let Some(fwmark) = fwmark {
-            udp_conn.set_fwmark(fwmark)?;
-        }
-
-        info!(
-            self.tunnel.logger,
-            "Connected endpoint :{}->{}",
-            port,
-            endpoint.addr.unwrap()
-        );
-
-        endpoint.conn = Some(Arc::clone(&udp_conn));
-
-        Ok(udp_conn)
+        Ok(())
     }
 
     pub fn is_allowed_ip<I: Into<IpAddr>>(&self, addr: I) -> bool {

@@ -794,9 +794,9 @@ impl<T: Tun, S: Sock> Device<T, S> {
                                 .unwrap();
 
                             // TODO: This whole conditional needs to be rewritten
-                            if let Ok(sock2) = peer.connect_endpoint2(d.listen_port, d.fwmark) {
+                            if let Ok(sockets) = peer.connect_endpoints(0, d.fwmark) {
                                 // Setup our fixed second endpoint
-                                d.register_conn_handler(Arc::clone(peer), sock2, ip_addr)
+                                d.register_conn_handler(Arc::clone(peer), sockets, ip_addr)
                                     .unwrap();
                             }
 
