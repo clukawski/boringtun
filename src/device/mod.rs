@@ -793,11 +793,13 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
                                 .unwrap();
 
-                            // TODO: This whole conditional needs to be rewritten
+                            // TODO: ip_addr should be endpoint addr
                             if let Ok(sockets) = peer.connect_endpoints(0, d.fwmark) {
                                 // Setup our fixed second endpoint
-                                d.register_conn_handler(Arc::clone(peer), sockets, ip_addr)
-                                    .unwrap();
+                                for sock in sockets {
+                                    d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
+                                        .unwrap();
+                                }
                             }
 
                             // If we have the interface name and this is a handshake response, set up the new interface address

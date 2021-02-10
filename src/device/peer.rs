@@ -220,7 +220,8 @@ impl<S: Sock> Peer<S> {
         };
     }
 
-    pub fn connect_endpoints(&self, port: u16, fwmark: Option<u32>) -> Result<(), Error> {
+    pub fn connect_endpoints(&self, port: u16, fwmark: Option<u32>) -> Result<Vec<Arc<S>>, Error> {
+        let mut endpoints_sockets: Vec<Arc<S>> = Vec::new();
         let mut endpoints = self.endpoints.unwrap();
         for e in endpoints {
             let mut endpoint = e.write();
@@ -250,9 +251,11 @@ impl<S: Sock> Peer<S> {
             );
 
             endpoint.conn = Some(Arc::clone(&udp_conn));
+
+            endpoints_sockets.push(udp_conn);
         }
 
-        Ok(())
+        Ok(endpoints_sockets
     }
 
     pub fn is_allowed_ip<I: Into<IpAddr>>(&self, addr: I) -> bool {
