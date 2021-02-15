@@ -303,10 +303,8 @@ impl Handshake {
     // get_peer_static_public returns the public key of the peer that initiated the handshake
     // This is used to create a peer -> IP mapping until it is deallocated to prevent a restarting peer instance exhausting the IP space
     pub(crate) fn get_peer_static_public(&self) -> [u8; 32] {
-        let static_public = self.params.get_peer_static_public().clone();
-        <&[u8; 32]>::try_from(static_public.as_bytes())
-            .unwrap()
-            .clone()
+        let static_public = self.params.get_peer_static_public();
+        *<&[u8; 32]>::try_from(static_public.as_bytes()).unwrap()
     }
 
     pub(crate) fn is_in_progress(&self) -> bool {
@@ -791,7 +789,7 @@ impl Handshake {
 
         let arb_data = super::HandshakeArbData {
             endpoints: None,
-            assigned_ip: self.assigned_ip.unwrap().clone(),
+            assigned_ip: self.assigned_ip.unwrap(),
         };
 
         Ok((
@@ -816,9 +814,8 @@ fn arb_decapsulate(data: [u8; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ]) -> super::
     }
     let endpoints_array: super::HandshakeEndpoints = endpoints.try_into().unwrap();
 
-    let arb_data = super::HandshakeArbData {
+    super::HandshakeArbData {
         endpoints: Some(endpoints_array),
         assigned_ip: ip,
-    };
-    arb_data
+    }
 }

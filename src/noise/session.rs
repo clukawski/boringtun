@@ -177,7 +177,7 @@ impl Session {
             sender: ChaCha20Poly1305::new_aead(&sending_key[..]),
             sending_key_counter: AtomicUsize::new(0),
             receiving_key_counter: Mutex::new(Default::default()),
-            arb_data: arb_data,
+            arb_data,
         }
     }
 

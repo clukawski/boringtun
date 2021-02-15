@@ -186,7 +186,7 @@ impl Tunn {
             }),
             assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
             endpoints: None,
-            ip_list: ip_list.clone(),
+            ip_list,
         };
 
         Ok(Box::new(tunn))
@@ -339,7 +339,7 @@ impl Tunn {
         let (packet, session) = {
             let mut handshake = self.handshake.lock();
 
-            if let Some(_) = self.ip_list {
+            if self.ip_list.is_some() {
                 let allocated_ip = self
                     .ip_list
                     .clone()
@@ -379,9 +379,9 @@ impl Tunn {
             handshake.receive_handshake_response(p)?
         };
 
-        let arb_data = &session.arb_data.clone();
+        let peer_endpoints = &session.arb_data.endpoints.clone();
         let mut ip = self.assigned_ip.lock();
-        *ip = arb_data.assigned_ip;
+        *ip = session.arb_data.assigned_ip;
 
         let keepalive_packet = session.format_packet_data(&[], dst);
         // Store new session in ring buffer
@@ -391,8 +391,8 @@ impl Tunn {
 
         if let Some(e) = &self.endpoints {
             let mut endpoints = e.lock();
-            if let Some(session_endpoints) = arb_data.endpoints {
-                *endpoints = session_endpoints.clone();
+            if let Some(session_endpoints) = *peer_endpoints {
+                *endpoints = session_endpoints;
             }
         }
 

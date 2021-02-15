@@ -89,8 +89,7 @@ impl<S: Sock> Peer<S> {
     }
 
     pub fn get_assigned_ip(&self) -> [u8; 5] {
-        let assigned_ip = self.tunnel.assigned_ip.lock();
-        return *assigned_ip;
+        *self.tunnel.assigned_ip.lock()
     }
 
     pub fn populate_endpoints(&self) {

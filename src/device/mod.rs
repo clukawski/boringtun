@@ -206,7 +206,7 @@ impl<T: Tun, S: Sock> DeviceHandle<T, S> {
         pkey: Option<X25519SecretKey>,
     ) -> Result<DeviceHandle<T, S>, Error> {
         let n_threads = config.n_threads;
-        let port = config.listen_port.clone();
+        let port = config.listen_port;
         let mut wg_interface = Device::<T, S>::new(name, config)?;
         // set private key if provided
         if let Some(private_key) = pkey {
@@ -321,16 +321,12 @@ impl<T: Tun, S: Sock> Device<T, S> {
     }
 
     fn remove_peer(&mut self, pub_key: &X25519PublicKey) {
-        if let Some(peer_data) = self.peers.get(pub_key.clone()) {
+        if let Some(peer_data) = self.peers.get(pub_key) {
             println!("removing peer tunnel {:?}", peer_data.get_assigned_ip(),);
             let peer_ip = peer_data.get_assigned_ip();
-            let static_public: [u8; 32] =
-                <&[u8; 32]>::try_from(pub_key.as_bytes()).unwrap().clone();
+            let static_public: [u8; 32] = *<&[u8; 32]>::try_from(pub_key.as_bytes()).unwrap();
             match &self.config.ip_list {
-                Some(list) => list
-                    .clone()
-                    .lock()
-                    .deallocate(peer_ip.clone(), static_public),
+                Some(list) => list.clone().lock().deallocate(peer_ip, static_public),
                 None => {}
             }
         }
@@ -930,9 +926,9 @@ fn check_auth<T: Tun, S: Sock>(hh: &handshake::HalfHandshake, d: &mut LockReadGu
 
             // response should contain the allowed ip + preshared-key seperated by new lines
             if let Ok(out) = external_auth {
-                let auth_data = String::from_utf8(out.stdout).unwrap_or(String::from(""));
-                if auth_data.len() > 0 {
-                    let auth_parts: Vec<&str> = auth_data.split("\n").collect();
+                let auth_data = String::from_utf8(out.stdout).unwrap_or_default();
+                if !auth_data.is_empty() {
+                    let auth_parts: Vec<&str> = auth_data.split('\n').collect();
                     if auth_parts.len() >= 2 {
                         let ip = AllowedIP::from_str(&auth_parts[0]).ok();
                         // parse the pre shared key

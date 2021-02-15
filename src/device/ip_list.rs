@@ -33,16 +33,16 @@ impl IpList {
             ip_list.push(full_ip);
         }
 
-        if ip_list.len() == 0 {
+        if ip_list.is_empty() {
             return None;
         }
 
-        return Some(IpList {
+        Some(IpList {
             list: ip_list,
             allocated: HashSet::new(),
             peer_ips: HashMap::new(),
             index: Cell::new(0),
-        });
+        })
     }
 
     // get_ip returns the first available IP to the caller, or None if the range is exhausted
@@ -67,7 +67,7 @@ impl IpList {
             self.index.set(current + 1);
         }
 
-        return Some(self.list[current - 1]);
+        Some(self.list[current - 1])
     }
 
     // allocate allocates the IP for the peer and stores the mapping of pubkey -> IP in memory to avoid IP exhaustion
@@ -81,21 +81,21 @@ impl IpList {
         // to implement
         if !self.peer_ips.contains_key(&static_public) {
             self.peer_ips.insert(static_public, ip);
-            &self.allocated.insert(ip);
-            Ok(ip)
-        } else {
-            if self.allocated.contains(&ip) {
-                if let Some(new_ip) = self.get_ip() {
-                    self.peer_ips.insert(static_public, new_ip);
-                    &self.allocated.insert(new_ip);
-                    Ok(new_ip)
-                } else {
-                    Err(WireGuardError::IPListExhausted)
-                }
+            self.allocated.insert(ip);
+            return Ok(ip);
+        }
+
+        if self.allocated.contains(&ip) {
+            if let Some(new_ip) = self.get_ip() {
+                self.peer_ips.insert(static_public, new_ip);
+                self.allocated.insert(new_ip);
+                return Ok(new_ip);
             } else {
-                Ok(ip)
+                return Err(WireGuardError::IPListExhausted);
             }
         }
+
+        Ok(ip)
     }
 
     // deallocate removes the IP allocation and pubkey -> IP mapping
