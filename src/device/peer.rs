@@ -20,7 +20,7 @@ pub struct Peer<S: Sock> {
     pub(crate) tunnel: Box<Tunn>, // The associated tunnel struct
     index: u32,                   // The index the tunnel uses
     endpoint: Arc<RwLock<Endpoint<S>>>,
-    endpoints: Arc<Mutex<Vec<Arc<RwLock<Endpoint<S>>>>>>,
+    endpoints: Arc<RwLock<Vec<Arc<RwLock<Endpoint<S>>>>>>,
     allowed_ips: AllowedIps<()>,
     preshared_key: Option<[u8; 32]>,
     pub assigned_ip: Mutex<[u8; 5]>,
@@ -77,7 +77,7 @@ impl<S: Sock> Peer<S> {
                 addr: endpoint,
                 conn: None,
             })),
-            endpoints: Arc::new(Mutex::new(endpoints_vec)),
+            endpoints: Arc::new(RwLock::new(endpoints_vec)),
             allowed_ips: allowed_ips.iter().collect(),
             preshared_key,
             assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
@@ -101,7 +101,7 @@ impl<S: Sock> Peer<S> {
             let endpoints_clone = self.endpoints.clone();
 
             // TODO maybe put normal endpoint in here so we can simplify endpoint_rand()
-            let mut endpoints_mut = endpoints_clone.lock();
+            let mut endpoints_mut = endpoints_clone.write();
             (*endpoints_mut).push(Arc::new(RwLock::new(Endpoint {
                 addr: Some(SocketAddr::new(
                     IpAddr::V4(Ipv4Addr::new(
@@ -184,7 +184,7 @@ impl<S: Sock> Peer<S> {
         let mut rng = thread_rng();
 
         let endpoints_clone = self.endpoints.clone();
-        let endpoints_lock = endpoints_clone.lock();
+        let endpoints_lock = endpoints_clone.read();
         let endpoints = endpoints_lock.deref().clone();
         let endpoints_len: usize = endpoints.len();
         let n: usize = rng.gen_range(0..endpoints_len + 1);
@@ -199,7 +199,7 @@ impl<S: Sock> Peer<S> {
 
     pub fn connect_endpoints(&self, port: u16, fwmark: Option<u32>) -> Result<Vec<Arc<S>>, Error> {
         let mut endpoints_sockets: Vec<Arc<S>> = Vec::new();
-        let endpoints = self.endpoints.lock();
+        let endpoints = self.endpoints.write();
         for e in endpoints.iter() {
             let mut endpoint = e.write();
             let udp_conn = Arc::new(match endpoint.addr {
