@@ -99,7 +99,7 @@ const HANDSHAKE_ARB_DATA_UNPACKED_SZ: usize = 4 * HANDSHAKE_NUM_ENDPOINTS + 5;
 // pattern matching in Tunn::parse_incoming_packet)
 const HANDSHAKE_RESP_ARB_SZ: usize = HANDSHAKE_RESP_SZ + HANDSHAKE_ARB_DATA_SZ;
 
-type HandshakeEndpoints = [[u8; 4]; HANDSHAKE_ENDPOINTS_SZ];
+pub type HandshakeEndpoints = [[u8; 4]; HANDSHAKE_ENDPOINTS_SZ];
 
 #[derive(Debug, Clone)]
 pub struct HandshakeArbData {

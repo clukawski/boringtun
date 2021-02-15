@@ -3,10 +3,12 @@
 
 use crate::device::*;
 use parking_lot::{Mutex, RwLock};
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
+use std::ops::Deref;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Default, Debug)]
 pub struct Endpoint<S: Sock> {
@@ -14,19 +16,11 @@ pub struct Endpoint<S: Sock> {
     pub conn: Option<Arc<S>>,
 }
 
-#[derive(Default, Debug)]
-pub struct MultiEndpoint<S: Sock> {
-    pub addr: Option<SocketAddr>,
-    pub conn: Option<Arc<S>>,
-    pub port: u16,
-}
-
 pub struct Peer<S: Sock> {
     pub(crate) tunnel: Box<Tunn>, // The associated tunnel struct
     index: u32,                   // The index the tunnel uses
-    endpoint: RwLock<Endpoint<S>>,
-    endpoint2: RwLock<Endpoint<S>>,
-    endpoints: Option<Vec<RwLock<MultiEndpoint<S>>>>,
+    endpoint: Arc<RwLock<Endpoint<S>>>,
+    endpoints: Arc<Mutex<Vec<Arc<RwLock<Endpoint<S>>>>>>,
     allowed_ips: AllowedIps<()>,
     preshared_key: Option<[u8; 32]>,
     pub assigned_ip: Mutex<[u8; 5]>,
@@ -61,7 +55,6 @@ impl<S: Sock> Peer<S> {
         tunnel: Box<Tunn>,
         index: u32,
         endpoint: Option<SocketAddr>,
-        endpoints: Option<Vec<SocketAddr>>,
         allowed_ips: &[AllowedIP],
         preshared_key: Option<[u8; 32]>,
     ) -> Peer<S> {
@@ -75,18 +68,16 @@ impl<S: Sock> Peer<S> {
         //     }
         // }
 
+        let endpoints_vec: Vec<Arc<RwLock<Endpoint<S>>>> = Vec::new();
+
         Peer {
             tunnel,
             index,
-            endpoint: RwLock::new(Endpoint {
+            endpoint: Arc::new(RwLock::new(Endpoint {
                 addr: endpoint,
                 conn: None,
-            }),
-            endpoint2: RwLock::new(Endpoint {
-                addr: endpoint,
-                conn: None,
-            }),
-            endpoints: None,
+            })),
+            endpoints: Arc::new(Mutex::new(endpoints_vec)),
             allowed_ips: allowed_ips.iter().collect(),
             preshared_key,
             assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
@@ -102,21 +93,28 @@ impl<S: Sock> Peer<S> {
         return *assigned_ip;
     }
 
-    pub fn populate_endpoints(&mut self) {
-        let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 100, 0, 1)), 8080);
-        let socket2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 100, 0, 2)), 6969);
-        let sock_input_vec = vec![socket, socket2];
-        let mut endpoints: Vec<RwLock<MultiEndpoint<S>>> = Vec::new();
+    pub fn populate_endpoints(&self) {
+        let tunn_lock = self.tunnel.endpoints.as_ref().unwrap().lock();
+        let tunn_endpoints = *tunn_lock;
 
-        for addr in sock_input_vec {
-            let endpoint = MultiEndpoint {
-                addr: Some(addr),
+        for endpoint in tunn_endpoints.iter() {
+            let endpoints_clone = self.endpoints.clone();
+
+            // TODO maybe put normal endpoint in here so we can simplify endpoint_rand()
+            let mut endpoints_mut = endpoints_clone.lock();
+            (*endpoints_mut).push(Arc::new(RwLock::new(Endpoint {
+                addr: Some(SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(
+                        endpoint[0],
+                        endpoint[1],
+                        endpoint[2],
+                        endpoint[3],
+                    )),
+                    0,
+                )),
                 conn: None,
-                port: 0,
-            };
-            endpoints.push(RwLock::new(endpoint));
+            })));
         }
-        self.endpoints = Some(endpoints);
     }
 
     pub fn endpoint(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {
@@ -182,47 +180,27 @@ impl<S: Sock> Peer<S> {
         Ok(udp_conn)
     }
 
-    pub fn endpoint2(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {
-        self.endpoint2.read()
-    }
+    pub fn endpoint_rand(&self) -> Arc<RwLock<Endpoint<S>>> {
+        let mut rng = thread_rng();
 
-    pub fn endpoint_rand(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {
-        // This can use .choose() once we have a Vec of endpoints
-        let mut rng = rand::thread_rng();
-        let endpoint_select: u8 = rng.gen();
-        if endpoint_select == 0 {
-            return self.endpoint.read();
-        } else {
-            self.endpoint2.read()
+        let endpoints_clone = self.endpoints.clone();
+        let endpoints_lock = endpoints_clone.lock();
+        let endpoints = endpoints_lock.deref().clone();
+        let endpoints_len: usize = endpoints.len();
+        let n: usize = rng.gen_range(0..endpoints_len + 1);
+        if n == endpoints_len + 1 {
+            return Arc::clone(&self.endpoint);
         }
-    }
 
-    pub fn shutdown_endpoint2(&self) {
-        if let Some(conn) = self.endpoint2.write().conn.take() {
-            info!(self.tunnel.logger, "Disconnecting from endpoint");
-            conn.shutdown();
-        }
-    }
+        let deref_rand = &endpoints[n];
 
-    pub fn set_endpoint2(&self, addr: SocketAddr) {
-        let mut endpoint = self.endpoint2.write();
-        if endpoint.addr != Some(addr) {
-            // We only need to update the endpoint if it differs from the current one
-            if let Some(conn) = endpoint.conn.take() {
-                conn.shutdown();
-            }
-
-            *endpoint = Endpoint {
-                addr: Some(addr),
-                conn: None,
-            }
-        };
+        Arc::clone(&deref_rand)
     }
 
     pub fn connect_endpoints(&self, port: u16, fwmark: Option<u32>) -> Result<Vec<Arc<S>>, Error> {
         let mut endpoints_sockets: Vec<Arc<S>> = Vec::new();
-        let mut endpoints = self.endpoints.unwrap();
-        for e in endpoints {
+        let endpoints = self.endpoints.lock();
+        for e in endpoints.iter() {
             let mut endpoint = e.write();
             let udp_conn = Arc::new(match endpoint.addr {
                 Some(addr @ SocketAddr::V4(_)) => S::new()?
@@ -254,7 +232,7 @@ impl<S: Sock> Peer<S> {
             endpoints_sockets.push(udp_conn);
         }
 
-        Ok(endpoints_sockets
+        Ok(endpoints_sockets)
     }
 
     pub fn is_allowed_ip<I: Into<IpAddr>>(&self, addr: I) -> bool {
