@@ -46,7 +46,7 @@ impl IpList {
     }
 
     // get_ip returns the first available IP to the caller, or None if the range is exhausted
-    pub fn get_ip(&self) -> Option<[u8; 5]> {
+    fn get_ip(&self) -> Option<[u8; 5]> {
         let mut current = self.index.load(Ordering::SeqCst);
         let mut ip_avail = false;
         let allocated = &self.allocated;
