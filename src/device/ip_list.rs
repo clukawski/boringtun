@@ -2,9 +2,9 @@ extern crate cidr;
 
 use crate::noise::errors::WireGuardError;
 use cidr::{Cidr, Ipv4Cidr};
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::net::Ipv4Addr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::vec::Vec;
 
 // IpList contains a list of IPs and allocation data
@@ -12,7 +12,7 @@ pub struct IpList {
     pub list: Vec<[u8; 5]>,
     pub allocated: HashSet<[u8; 5]>,
     pub peer_ips: HashMap<[u8; 32], [u8; 5]>,
-    index: AtomicUsize,
+    index: Cell<usize>,
 }
 
 impl IpList {
@@ -41,32 +41,31 @@ impl IpList {
             list: ip_list,
             allocated: HashSet::new(),
             peer_ips: HashMap::new(),
-            index: AtomicUsize::new(0),
+            index: Cell::new(0),
         });
     }
 
     // get_ip returns the first available IP to the caller, or None if the range is exhausted
     fn get_ip(&self) -> Option<[u8; 5]> {
-        let mut current = self.index.load(Ordering::SeqCst);
-        let mut ip_avail = false;
+        let mut current = self.index.get();
         let allocated = &self.allocated;
 
-        while !ip_avail {
+        loop {
             if current == self.list.len() {
-                self.index.store(0, Ordering::SeqCst);
+                self.index.set(0);
             }
-            current = self.index.load(Ordering::SeqCst);
+            current = self.index.get();
             if self.allocated.len() == self.list.len() {
-                // If we've cycled through the list without finding a free IP, return one
+                // If we've cycled through the list without finding a free IP, return None
                 return None;
             }
 
-            let ip = self.list[self.index.load(Ordering::SeqCst)];
-            ip_avail = !&allocated.contains(&ip);
-            self.index.store(current + 1, Ordering::SeqCst);
+            let ip = self.list[self.index.get()];
+            if !&allocated.contains(&ip) {
+                break;
+            }
+            self.index.set(current + 1);
         }
-
-        current = self.index.load(Ordering::SeqCst);
 
         return Some(self.list[current - 1]);
     }
