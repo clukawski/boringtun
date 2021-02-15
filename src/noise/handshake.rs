@@ -172,7 +172,7 @@ pub struct Handshake {
     last_handshake_timestamp: Tai64N, // The timestamp of the last handshake we received
     stamper: TimeStamper,             // TODO: make TimeStamper a singleton
     pub(super) last_rtt: Option<u32>,
-    pub assigned_ip: [u8; 5],
+    pub assigned_ip: Option<[u8; 5]>,
 }
 
 #[derive(Default)]
@@ -279,7 +279,6 @@ impl Handshake {
         peer_static_public: Arc<X25519PublicKey>,
         global_idx: u32,
         preshared_key: Option<[u8; 32]>,
-        assigned_ip: [u8; 5],
     ) -> Result<Handshake, WireGuardError> {
         let params = NoiseParams::new(
             static_private,
@@ -297,7 +296,7 @@ impl Handshake {
             stamper: TimeStamper::new(),
             cookies: Default::default(),
             last_rtt: None,
-            assigned_ip: assigned_ip,
+            assigned_ip: None,
         })
     }
 
@@ -764,7 +763,7 @@ impl Handshake {
         // msg.encrypted_nothing = AEAD(key, 0, [empty], responder.hash)
         SEAL!(encrypted_nothing, key, 0, [], hash);
 
-        let mut arb_data_vec = self.assigned_ip.to_vec();
+        let mut arb_data_vec = self.assigned_ip.unwrap().to_vec();
         let peer_endpoints: [u8; super::HANDSHAKE_ENDPOINTS_SZ] =
             [1, 2, 3, 1, 1, 2, 3, 2, 1, 2, 3, 3, 0, 0, 0, 0];
         arb_data_vec.extend_from_slice(&peer_endpoints);
@@ -792,7 +791,7 @@ impl Handshake {
 
         let arb_data = super::HandshakeArbData {
             endpoints: None,
-            assigned_ip: self.assigned_ip.clone(),
+            assigned_ip: self.assigned_ip.unwrap().clone(),
         };
 
         Ok((

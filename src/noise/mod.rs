@@ -160,16 +160,6 @@ impl Tunn {
     ) -> Result<Box<Tunn>, &'static str> {
         let static_public = Arc::new(static_private.public_key());
 
-        let mut tunn_ip = [0, 0, 0, 0, 0];
-
-        if let Some(_) = ip_list {
-            let assigned_ip = ip_list.clone().unwrap().lock().get_ip();
-            match assigned_ip {
-                Some(ip) => tunn_ip = ip,
-                None => println!("no IP to seal"),
-            }
-        }
-
         let tunn = Tunn {
             handshake: Mutex::new(
                 Handshake::new(
@@ -178,7 +168,6 @@ impl Tunn {
                     peer_static_public,
                     index << 8,
                     preshared_key,
-                    tunn_ip,
                 )
                 .map_err(|_| "Invalid parameters")?,
             ),
@@ -195,7 +184,7 @@ impl Tunn {
             rate_limiter: rate_limiter.unwrap_or_else(|| {
                 Arc::new(RateLimiter::new(&static_public, PEER_HANDSHAKE_RATE_LIMIT))
             }),
-            assigned_ip: Mutex::new(tunn_ip),
+            assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
             endpoints: None,
             ip_list: ip_list.clone(),
         };
@@ -345,37 +334,29 @@ impl Tunn {
     ) -> Result<TunnResult<'a>, WireGuardError> {
         debug!(self.logger, "Received handshake_initiation"; "remote_idx" => p.sender_idx);
 
+        let mut ip = self.assigned_ip.lock();
+
         let (packet, session) = {
             let mut handshake = self.handshake.lock();
+
+            if let Some(_) = self.ip_list {
+                let allocated_ip = self
+                    .ip_list
+                    .clone()
+                    .unwrap()
+                    .lock()
+                    .allocate(*ip, handshake.get_peer_static_public())?;
+                *ip = allocated_ip;
+            }
+            // TODO: handle regular wg implementations
+
+            handshake.assigned_ip = Some(*ip);
             handshake.receive_handshake_initialization(p, dst)?
         };
-        let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
-        assigned_ip.copy_from_slice(&session.arb_data.assigned_ip);
-        let arb_data = &session.arb_data.clone();
 
         // Store new session in ring buffer
         let index = session.local_index();
         *self.sessions[index % N_SESSIONS].write() = Some(session);
-
-        let mut ip = self.assigned_ip.lock();
-        if assigned_ip != [0, 0, 0, 0, 0] {
-            *ip = assigned_ip;
-            if let Some(e) = &self.endpoints {
-                let mut endpoints = e.lock();
-                if let Some(session_endpoints) = arb_data.endpoints {
-                    *endpoints = session_endpoints.clone();
-                }
-            }
-
-            if let Some(_) = self.ip_list {
-                let handshake = self.handshake.lock();
-                self.ip_list
-                    .clone()
-                    .unwrap()
-                    .lock()
-                    .allocate(assigned_ip, handshake.get_peer_static_public());
-            }
-        }
 
         self.timer_tick(TimerName::TimeLastPacketReceived);
         self.timer_tick(TimerName::TimeLastPacketSent);
@@ -397,8 +378,10 @@ impl Tunn {
             let mut handshake = self.handshake.lock();
             handshake.receive_handshake_response(p)?
         };
-        let mut assigned_ip: [u8; 5] = [0, 0, 0, 0, 0];
-        assigned_ip.copy_from_slice(&session.arb_data.assigned_ip);
+
+        let arb_data = &session.arb_data.clone();
+        let mut ip = self.assigned_ip.lock();
+        *ip = arb_data.assigned_ip;
 
         let keepalive_packet = session.format_packet_data(&[], dst);
         // Store new session in ring buffer
@@ -406,8 +389,12 @@ impl Tunn {
         let index = l_idx % N_SESSIONS;
         *self.sessions[index].write() = Some(session);
 
-        let mut ip = self.assigned_ip.lock();
-        *ip = assigned_ip;
+        if let Some(e) = &self.endpoints {
+            let mut endpoints = e.lock();
+            if let Some(session_endpoints) = arb_data.endpoints {
+                *endpoints = session_endpoints.clone();
+            }
+        }
 
         self.timer_tick(TimerName::TimeLastPacketReceived);
         self.timer_tick_session_established(true, index); // New session established, we are the initiator

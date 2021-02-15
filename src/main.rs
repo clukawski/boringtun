@@ -9,16 +9,16 @@ pub mod device;
 pub mod ffi;
 pub mod noise;
 
-use crypto::x25519::X25519SecretKey;
 use crate::device::drop_privileges::*;
 use crate::device::ip_list::IpList;
 use crate::device::*;
 use clap::{value_t, App, Arg};
+use crypto::x25519::X25519SecretKey;
 use daemonize::Daemonize;
 use parking_lot::Mutex;
 use slog::{error, info, o, Drain, Logger};
-use std::fs::File;
 use std::fs;
+use std::fs::File;
 use std::net::Ipv4Addr;
 use std::os::unix::net::UnixDatagram;
 use std::process::exit;
@@ -130,9 +130,14 @@ fn main() {
     let background = !matches.is_present("foreground");
     let tun_name = matches.value_of("INTERFACE_NAME").unwrap();
     let n_threads = value_t!(matches.value_of("threads"), usize).unwrap_or_else(|e| e.exit());
-    let log_level = value_t!(matches.value_of("verbosity"), slog::Level).unwrap_or_else(|e| e.exit());
+    let log_level =
+        value_t!(matches.value_of("verbosity"), slog::Level).unwrap_or_else(|e| e.exit());
     let peer_auth = matches.value_of("peer-auth").unwrap_or_default();
-    let listen_port: u16 = matches.value_of("listen-port").unwrap_or_default().parse().unwrap_or_default();
+    let listen_port: u16 = matches
+        .value_of("listen-port")
+        .unwrap_or_default()
+        .parse()
+        .unwrap_or_default();
     let init_pkey = matches.value_of("private-key").unwrap_or_default();
     let init_address = matches.value_of("address").unwrap_or_default();
     let cidr = matches.value_of("cidr").unwrap_or_default();
@@ -147,10 +152,10 @@ fn main() {
             Err(e) => {
                 eprintln!("Failed to parse private key: {:?}", e);
                 exit(1);
-            },
+            }
         };
     }
-    
+
     // Create a socketpair to communicate between forked processes
     let (sock1, sock2) = UnixDatagram::pair().unwrap();
     let _ = sock1.set_nonblocking(true);
@@ -243,41 +248,44 @@ fn main() {
     //set the interface address if provided, and bring up the interface
     if init_address.len() > 0 {
         if let Err(e) = Command::new("/sbin/ip")
-                        .arg("addr")
-                        .arg("add")
-                        .arg(init_address)
-                        .arg("dev")
-                        .arg(tun_name)
-                        .status() {
-                            eprintln!("Failed to add interface address: {:?}", e);
-                            sock1.send(&[0]).unwrap();
-                            exit(1);
-                        }
+            .arg("addr")
+            .arg("add")
+            .arg(init_address)
+            .arg("dev")
+            .arg(tun_name)
+            .status()
+        {
+            eprintln!("Failed to add interface address: {:?}", e);
+            sock1.send(&[0]).unwrap();
+            exit(1);
+        }
         if let Err(e) = Command::new("/sbin/ip")
-                        .arg("link")
-                        .arg("set")
-                        .arg(tun_name)
-                        .arg("up")
-                        .status() {
-                            eprintln!("Failed to bring up interface: {:?}", e);
-                            sock1.send(&[0]).unwrap();
-                            exit(1);
-                        }
+            .arg("link")
+            .arg("set")
+            .arg(tun_name)
+            .arg("up")
+            .status()
+        {
+            eprintln!("Failed to bring up interface: {:?}", e);
+            sock1.send(&[0]).unwrap();
+            exit(1);
+        }
     }
 
     //set the interface mtu
     if init_mtu.len() > 0 {
         if let Err(e) = Command::new("/sbin/ip")
-                        .arg("link")
-                        .arg("set")
-                        .arg(tun_name)
-                        .arg("mtu")
-                        .arg(init_mtu)
-                        .status() {
-                            eprintln!("Failed to interface MTU: {:?}", e);
-                            sock1.send(&[0]).unwrap();
-                            exit(1);
-                        }
+            .arg("link")
+            .arg("set")
+            .arg(tun_name)
+            .arg("mtu")
+            .arg(init_mtu)
+            .status()
+        {
+            eprintln!("Failed to interface MTU: {:?}", e);
+            sock1.send(&[0]).unwrap();
+            exit(1);
+        }
     }
 
     // Notify parent that tunnel initialization succeeded
