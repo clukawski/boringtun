@@ -4,7 +4,6 @@
 use crate::device::*;
 use parking_lot::{Mutex, RwLock};
 use rand::Rng;
-use std::cell::Cell;
 use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
@@ -30,7 +29,7 @@ pub struct Peer<S: Sock> {
     endpoints: Option<Vec<RwLock<MultiEndpoint<S>>>>,
     allowed_ips: AllowedIps<()>,
     preshared_key: Option<[u8; 32]>,
-    pub assigned_ip: Mutex<Cell<[u8; 5]>>,
+    pub assigned_ip: Mutex<[u8; 5]>,
 }
 
 #[derive(Debug)]
@@ -90,7 +89,7 @@ impl<S: Sock> Peer<S> {
             endpoints: None,
             allowed_ips: allowed_ips.iter().collect(),
             preshared_key,
-            assigned_ip: Mutex::new(Cell::new([0, 0, 0, 0, 0])),
+            assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
         }
     }
 
@@ -99,8 +98,8 @@ impl<S: Sock> Peer<S> {
     }
 
     pub fn get_assigned_ip(&self) -> [u8; 5] {
-        let assigned_ip = self.tunnel.assigned_ip.lock().get();
-        return assigned_ip;
+        let assigned_ip = self.tunnel.assigned_ip.lock();
+        return *assigned_ip;
     }
 
     pub fn populate_endpoints(&mut self) {

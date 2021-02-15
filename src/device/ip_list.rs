@@ -9,8 +9,8 @@ use std::vec::Vec;
 // IpList contains a list of IPs and allocation data
 pub struct IpList {
     pub list: RefCell<Vec<[u8; 5]>>,
-    pub allocated: Cell<HashMap<[u8; 5], bool>>,
-    pub peer_ips: Cell<HashMap<[u8; 32], [u8; 5]>>,
+    pub allocated: HashMap<[u8; 5], bool>,
+    pub peer_ips: HashMap<[u8; 32], [u8; 5]>,
     index: Cell<usize>,
 }
 
@@ -39,8 +39,8 @@ impl IpList {
 
         return Some(IpList {
             list: RefCell::new(ip_list),
-            allocated: Cell::new(HashMap::new()),
-            peer_ips: Cell::new(HashMap::new()),
+            allocated: HashMap::new(),
+            peer_ips: HashMap::new(),
             index: Cell::new(index),
         });
     }
@@ -50,7 +50,7 @@ impl IpList {
         let mut current = self.index.get();
         let list = self.list.get_mut();
         let mut ip_avail = false;
-        let allocated = self.allocated.get_mut();
+        let allocated = &self.allocated;
         let mut counter: usize = 0;
 
         while !ip_avail {
@@ -74,8 +74,8 @@ impl IpList {
 
     // allocate allocates the IP for the peer and stores the mapping of pubkey -> IP in memory to avoid IP exhaustion
     pub fn allocate(&mut self, ip: [u8; 5], static_public: [u8; 32]) {
-        let allocated = self.allocated.get_mut();
-        let peer_ips = self.peer_ips.get_mut();
+        let allocated = &mut self.allocated;
+        let peer_ips = &mut self.peer_ips;
 
         // don't allocate this IP if we've already got one
         // there might be a better way of doing this, this was the least complex
@@ -88,8 +88,8 @@ impl IpList {
 
     // deallocate removes the IP allocation and pubkey -> IP mapping
     pub fn deallocate(&mut self, ip: [u8; 5], static_public: [u8; 32]) {
-        let allocated = self.allocated.get_mut();
-        let peer_ips = self.peer_ips.get_mut();
+        let allocated = &mut self.allocated;
+        let peer_ips = &mut self.peer_ips;
 
         allocated.remove(&ip);
         peer_ips.remove(&static_public);

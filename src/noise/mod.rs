@@ -16,7 +16,6 @@ use crate::noise::handshake::Handshake;
 use crate::noise::rate_limiter::RateLimiter;
 use crate::noise::timers::{TimerName, Timers};
 
-use std::cell::Cell;
 use std::collections::VecDeque;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -68,8 +67,8 @@ pub struct Tunn {
     timers: timers::Timers, // Keeps tabs on the expiring timers
     tx_bytes: AtomicUsize,
     rx_bytes: AtomicUsize,
-    pub assigned_ip: Mutex<Cell<[u8; 5]>>,
-    pub endpoints: Option<Mutex<Cell<HandshakeEndpoints>>>,
+    pub assigned_ip: Mutex<[u8; 5]>,
+    pub endpoints: Option<Mutex<HandshakeEndpoints>>,
     ip_list: Option<Arc<Mutex<IpList>>>,
 
     rate_limiter: Arc<RateLimiter>,
@@ -196,7 +195,7 @@ impl Tunn {
             rate_limiter: rate_limiter.unwrap_or_else(|| {
                 Arc::new(RateLimiter::new(&static_public, PEER_HANDSHAKE_RATE_LIMIT))
             }),
-            assigned_ip: Mutex::new(Cell::new(tunn_ip)),
+            assigned_ip: Mutex::new(tunn_ip),
             endpoints: None,
             ip_list: ip_list.clone(),
         };
@@ -358,13 +357,13 @@ impl Tunn {
         let index = session.local_index();
         *self.sessions[index % N_SESSIONS].write() = Some(session);
 
-        let ip = self.assigned_ip.lock();
+        let mut ip = self.assigned_ip.lock();
         if assigned_ip != [0, 0, 0, 0, 0] {
-            ip.set(assigned_ip);
+            *ip = assigned_ip;
             if let Some(e) = &self.endpoints {
-                let endpoints = e.lock();
+                let mut endpoints = e.lock();
                 if let Some(session_endpoints) = arb_data.endpoints {
-                    endpoints.set(session_endpoints.clone());
+                    *endpoints = session_endpoints.clone();
                 }
             }
 
@@ -407,8 +406,8 @@ impl Tunn {
         let index = l_idx % N_SESSIONS;
         *self.sessions[index].write() = Some(session);
 
-        let ip = self.assigned_ip.lock();
-        ip.set(assigned_ip);
+        let mut ip = self.assigned_ip.lock();
+        *ip = assigned_ip;
 
         self.timer_tick(TimerName::TimeLastPacketReceived);
         self.timer_tick_session_established(true, index); // New session established, we are the initiator
