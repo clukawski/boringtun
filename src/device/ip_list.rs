@@ -1,14 +1,14 @@
 extern crate cidr;
 
 use cidr::{Cidr, Ipv4Cidr};
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::vec::Vec;
 
 // IpList contains a list of IPs and allocation data
 pub struct IpList {
-    pub list: RefCell<Vec<[u8; 5]>>,
+    pub list: Vec<[u8; 5]>,
     pub allocated: HashMap<[u8; 5], bool>,
     pub peer_ips: HashMap<[u8; 32], [u8; 5]>,
     index: Cell<usize>,
@@ -38,7 +38,7 @@ impl IpList {
         }
 
         return Some(IpList {
-            list: RefCell::new(ip_list),
+            list: ip_list,
             allocated: HashMap::new(),
             peer_ips: HashMap::new(),
             index: Cell::new(index),
@@ -48,7 +48,7 @@ impl IpList {
     // get_ip returns the first available IP to the caller, or None if the range is exhausted
     pub fn get_ip(&mut self) -> Option<[u8; 5]> {
         let mut current = self.index.get();
-        let list = self.list.get_mut();
+        let list = &self.list;
         let mut ip_avail = false;
         let allocated = &self.allocated;
         let mut counter: usize = 0;
