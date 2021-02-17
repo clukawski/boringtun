@@ -58,16 +58,6 @@ impl<S: Sock> Peer<S> {
         allowed_ips: &[AllowedIP],
         preshared_key: Option<[u8; 32]>,
     ) -> Peer<S> {
-        // let mut endpoints_vec = Vec::new();
-        // if let Some(e) = endpoints {
-        //     for endpoint in e {
-        //         endpoints_vec.push(RwLock::new(Endpoint {
-        //             addr: Some(endpoint),
-        //             conn: None,
-        //         }));
-        //     }
-        // }
-
         let endpoints_vec: Vec<Arc<RwLock<Endpoint<S>>>> = Vec::new();
 
         Peer {
