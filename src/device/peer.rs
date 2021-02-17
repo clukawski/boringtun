@@ -128,10 +128,17 @@ impl<S: Sock> Peer<S> {
     }
 
     pub fn shutdown_endpoints(&self) {
+        // Shutdown the initial endpoint
+        if let Some(conn) = self.endpoint.write().conn.take() {
+            info!(self.tunnel.logger, "Disconnecting from endpoint");
+            conn.shutdown();
+        }
+
+        // Shutdown our list of additional endpoints, if any were passed in the handshake
         let endpoints = self.endpoints.write();
-        for endpoint in endpoints.iter() {
+        for (i, endpoint) in endpoints.iter().enumerate() {
             if let Some(conn) = endpoint.write().conn.take() {
-                info!(self.tunnel.logger, "Disconnecting from endpoint");
+                info!(self.tunnel.logger, "Disconnecting from endpoint {}", i);
                 conn.shutdown();
             }
         }
@@ -206,8 +213,12 @@ impl<S: Sock> Peer<S> {
         Arc::clone(&deref_rand)
     }
 
-    pub fn connect_endpoints(&self, port: u16, fwmark: Option<u32>) -> Result<Vec<Arc<S>>, Error> {
-        let mut endpoints_sockets: Vec<Arc<S>> = Vec::new();
+    pub fn connect_endpoints(
+        &self,
+        port: u16,
+        fwmark: Option<u32>,
+    ) -> Result<Vec<(IpAddr, Arc<S>)>, Error> {
+        let mut endpoints_sockets: Vec<(IpAddr, Arc<S>)> = Vec::new();
         let endpoints = self.endpoints.write();
         for e in endpoints.iter() {
             let mut endpoint = e.write();
@@ -238,7 +249,7 @@ impl<S: Sock> Peer<S> {
 
             endpoint.conn = Some(Arc::clone(&udp_conn));
 
-            endpoints_sockets.push(udp_conn);
+            endpoints_sockets.push((endpoint.addr.unwrap().ip(), udp_conn));
         }
 
         Ok(endpoints_sockets)

@@ -741,8 +741,8 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             // TODO: ip_addr should be endpoint addr
                             if let Ok(sockets) = peer.connect_endpoints(0, d.fwmark) {
                                 // Setup our fixed second endpoint
-                                for sock in sockets {
-                                    d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
+                                for (addr, sock) in sockets {
+                                    d.register_conn_handler(Arc::clone(peer), sock, addr)
                                         .unwrap();
                                 }
                             }
