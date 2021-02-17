@@ -333,7 +333,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
 
         if let Some(peer) = self.peers.remove(pub_key) {
             // Found a peer to remove, now purge all references to it:
-            peer.shutdown_endpoint(); // close open udp socket and free the closure
+            peer.shutdown_endpoints(); // close open udp socket and free the closure
             self.peers_by_idx.remove(&peer.index()); // peers_by_idx
             self.peers_by_ip
                 .remove(&|p: &Arc<Peer<S>>| Arc::ptr_eq(&peer, p)); // peers_by_ip

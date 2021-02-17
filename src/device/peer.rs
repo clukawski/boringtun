@@ -127,6 +127,16 @@ impl<S: Sock> Peer<S> {
         }
     }
 
+    pub fn shutdown_endpoints(&self) {
+        let endpoints = self.endpoints.write();
+        for endpoint in endpoints.iter() {
+            if let Some(conn) = endpoint.write().conn.take() {
+                info!(self.tunnel.logger, "Disconnecting from endpoint");
+                conn.shutdown();
+            }
+        }
+    }
+
     pub fn set_endpoint(&self, addr: SocketAddr) {
         let mut endpoint = self.endpoint.write();
         if endpoint.addr != Some(addr) {
