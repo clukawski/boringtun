@@ -83,6 +83,7 @@ const COOKIE_REPLY: MessageType = 3;
 const DATA: MessageType = 4;
 
 const HANDSHAKE_INIT_SZ: usize = 148;
+const HANDSHAKE_INIT_ARB_SZ: usize = HANDSHAKE_INIT_SZ + 1;
 const HANDSHAKE_RESP_SZ: usize = 92;
 const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
@@ -116,7 +117,24 @@ pub struct HandshakeInit<'a> {
 }
 
 #[derive(Debug)]
+pub struct HandshakeInitNeutrino<'a> {
+    sender_idx: u32,
+    unencrypted_ephemeral: &'a [u8],
+    encrypted_static: &'a [u8],
+    encrypted_timestamp: &'a [u8],
+    pub arbitrary_payload: &'a [u8],
+}
+
+#[derive(Debug)]
 pub struct HandshakeResponse<'a> {
+    sender_idx: u32,
+    pub receiver_idx: u32,
+    unencrypted_ephemeral: &'a [u8],
+    encrypted_nothing: &'a [u8],
+}
+
+#[derive(Debug)]
+pub struct HandshakeResponseNeutrino<'a> {
     sender_idx: u32,
     pub receiver_idx: u32,
     unencrypted_ephemeral: &'a [u8],
@@ -142,9 +160,25 @@ pub struct PacketData<'a> {
 #[derive(Debug)]
 pub enum Packet<'a> {
     HandshakeInit(HandshakeInit<'a>),
+    HandshakeInitNeutrino(HandshakeInitNeutrino<'a>),
     HandshakeResponse(HandshakeResponse<'a>),
+    HandshakeResponseNeutrino(HandshakeResponseNeutrino<'a>),
     PacketCookieReply(PacketCookieReply<'a>),
     PacketData(PacketData<'a>),
+}
+
+// Describes a handshake response packet from network
+#[derive(Debug)]
+pub enum HandshakeResponsePacket<'a> {
+    HandshakeResponse(HandshakeResponse<'a>),
+    HandshakeResponseNeutrino(HandshakeResponseNeutrino<'a>),
+}
+
+// Describes a handshake init packet from network
+#[derive(Debug)]
+pub enum HandshakeInitPacket<'a> {
+    HandshakeInit(HandshakeInit<'a>),
+    HandshakeInitNeutrino(HandshakeInitNeutrino<'a>),
 }
 
 impl Tunn {
@@ -280,6 +314,8 @@ impl Tunn {
         match packet {
             Packet::HandshakeInit(p) => self.handle_handshake_init(p, dst),
             Packet::HandshakeResponse(p) => self.handle_handshake_response(p, dst),
+            Packet::HandshakeInitNeutrino(p) => self.handle_handshake_init(p, dst),
+            Packet::HandshakeResponseNeutrino(p) => self.handle_handshake_response(p, dst),
             Packet::PacketCookieReply(p) => self.handle_cookie_reply(p),
             Packet::PacketData(p) => self.handle_data(p, dst),
         }
@@ -304,8 +340,23 @@ impl Tunn {
                 encrypted_static: &src[40..88],
                 encrypted_timestamp: &src[88..116],
             }),
+            (HANDSHAKE_INIT, HANDSHAKE_INIT_ARB_SZ) => {
+                Packet::HandshakeInitNeutrino(HandshakeInitNeutrino {
+                    sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
+                    unencrypted_ephemeral: &src[8..40],
+                    encrypted_static: &src[40..88],
+                    encrypted_timestamp: &src[88..116],
+                    arbitrary_payload: &src[148..HANDSHAKE_INIT_ARB_SZ],
+                })
+            }
+            (HANDSHAKE_RESP, HANDSHAKE_RESP_SZ) => Packet::HandshakeResponse(HandshakeResponse {
+                sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
+                receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),
+                unencrypted_ephemeral: &src[12..44],
+                encrypted_nothing: &src[44..60],
+            }),
             (HANDSHAKE_RESP, HANDSHAKE_RESP_ARB_SZ) => {
-                Packet::HandshakeResponse(HandshakeResponse {
+                Packet::HandshakeResponseNeutrino(HandshakeResponseNeutrino {
                     sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
                     receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),
                     unencrypted_ephemeral: &src[12..44],

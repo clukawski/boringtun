@@ -1,7 +1,10 @@
 // Copyright (c) 2019 Cloudflare, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-use super::{HandshakeInit, HandshakeResponse, PacketCookieReply};
+use super::{
+    HandshakeInit, HandshakeInitNeutrino, HandshakeResponse, HandshakeResponseNeutrino,
+    PacketCookieReply,
+};
 use crate::crypto::blake2s::Blake2s;
 use crate::crypto::chacha20poly1305::ChaCha20Poly1305;
 use crate::crypto::x25519::{X25519PublicKey, X25519SecretKey};

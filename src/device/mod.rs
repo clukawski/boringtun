@@ -669,7 +669,20 @@ impl<T: Tun, S: Sock> Device<T, S> {
                                     Err(_) => None,
                                 }
                             }
+                            Packet::HandshakeInitNeutrino(p) => {
+                                match parse_handshake_anon(&private_key, &public_key, &p) {
+                                    Ok(hh) => {
+                                        check_auth(&hh, d);
+                                        d.peers
+                                            .get(&X25519PublicKey::from(&hh.peer_static_public[..]))
+                                    }
+                                    Err(_) => None,
+                                }
+                            }
                             Packet::HandshakeResponse(p) => {
+                                d.peers_by_idx.get(&(p.receiver_idx >> 8))
+                            }
+                            Packet::HandshakeResponseNeutrino(p) => {
                                 d.peers_by_idx.get(&(p.receiver_idx >> 8))
                             }
                             Packet::PacketCookieReply(p) => {
