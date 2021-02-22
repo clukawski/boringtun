@@ -770,7 +770,7 @@ impl Handshake {
 
         let mut arb_data_vec = self.assigned_ip.unwrap().to_vec();
         let peer_endpoints: [u8; super::HANDSHAKE_ENDPOINTS_SZ] =
-            [1, 2, 3, 1, 1, 2, 3, 2, 1, 2, 3, 3, 0, 0, 0, 0];
+            [0; super::HANDSHAKE_ENDPOINTS_SZ];
         arb_data_vec.extend_from_slice(&peer_endpoints);
         let arb_data_concat = arb_data_vec.as_slice();
 
