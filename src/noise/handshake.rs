@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use super::{
-    HandshakeInit, HandshakeInitNeutrino, HandshakeResponse, HandshakeResponseNeutrino,
-    PacketCookieReply,
+    HandshakeInit, HandshakeInitNeutrino, HandshakeInitPacket, HandshakeResponse,
+    HandshakeResponseNeutrino, HandshakeResponsePacket, PacketCookieReply,
 };
 use crate::crypto::blake2s::Blake2s;
 use crate::crypto::chacha20poly1305::ChaCha20Poly1305;
@@ -362,7 +362,7 @@ impl Handshake {
 
     pub(super) fn receive_handshake_initialization<'a>(
         &mut self,
-        packet: HandshakeInit,
+        init_packet: HandshakeInitPacket,
         dst: &'a mut [u8],
     ) -> Result<(&'a mut [u8], Session), WireGuardError> {
         // initiator.chaining_key = HASH(CONSTRUCTION)
