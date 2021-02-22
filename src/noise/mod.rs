@@ -83,6 +83,7 @@ const COOKIE_REPLY: MessageType = 3;
 const DATA: MessageType = 4;
 
 const HANDSHAKE_INIT_SZ: usize = 148;
+const HANDSHAKE_INIT_ARB_SZ: usize = HANDSHAKE_INIT_SZ + 1;
 const HANDSHAKE_RESP_SZ: usize = 92;
 const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
@@ -113,6 +114,7 @@ pub struct HandshakeInit<'a> {
     unencrypted_ephemeral: &'a [u8],
     encrypted_static: &'a [u8],
     encrypted_timestamp: &'a [u8],
+    pub arbitrary_payload: Option<&'a [u8]>,
 }
 
 #[derive(Debug)]
@@ -121,7 +123,7 @@ pub struct HandshakeResponse<'a> {
     pub receiver_idx: u32,
     unencrypted_ephemeral: &'a [u8],
     encrypted_nothing: &'a [u8],
-    pub arbitrary_payload: &'a [u8],
+    pub arbitrary_payload: Option<&'a [u8]>,
 }
 
 #[derive(Debug)]
@@ -303,6 +305,24 @@ impl Tunn {
                 unencrypted_ephemeral: &src[8..40],
                 encrypted_static: &src[40..88],
                 encrypted_timestamp: &src[88..116],
+                arbitrary_payload: None,
+            }),
+            // Set the arbitrary data if we have it
+            (HANDSHAKE_INIT, HANDSHAKE_INIT_ARB_SZ) => Packet::HandshakeInit(HandshakeInit {
+                sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
+                unencrypted_ephemeral: &src[8..40],
+                encrypted_static: &src[40..88],
+                encrypted_timestamp: &src[88..116],
+                arbitrary_payload: Some(&src[148..HANDSHAKE_INIT_ARB_SZ]),
+            }),
+            // We probably don't need this case, but maybe in the future we can make the client
+            // compatible with regular wg servers?
+            (HANDSHAKE_RESP, HANDSHAKE_RESP_SZ) => Packet::HandshakeResponse(HandshakeResponse {
+                sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
+                receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),
+                unencrypted_ephemeral: &src[12..44],
+                encrypted_nothing: &src[44..60],
+                arbitrary_payload: None,
             }),
             (HANDSHAKE_RESP, HANDSHAKE_RESP_ARB_SZ) => {
                 Packet::HandshakeResponse(HandshakeResponse {
@@ -310,7 +330,7 @@ impl Tunn {
                     receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),
                     unencrypted_ephemeral: &src[12..44],
                     encrypted_nothing: &src[44..60],
-                    arbitrary_payload: &src[92..HANDSHAKE_RESP_ARB_SZ],
+                    arbitrary_payload: Some(&src[92..HANDSHAKE_RESP_ARB_SZ]),
                 })
             }
             (COOKIE_REPLY, COOKIE_REPLY_SZ) => Packet::PacketCookieReply(PacketCookieReply {
@@ -338,19 +358,20 @@ impl Tunn {
 
         let (packet, session) = {
             let mut handshake = self.handshake.lock();
-
-            if self.ip_list.is_some() {
-                let allocated_ip = self
-                    .ip_list
-                    .clone()
-                    .unwrap()
-                    .lock()
-                    .allocate(*ip, handshake.get_peer_static_public())?;
-                *ip = allocated_ip;
+            if p.arbitrary_payload.is_some() {
+                if self.ip_list.is_some() {
+                    let allocated_ip = self
+                        .ip_list
+                        .clone()
+                        .unwrap()
+                        .lock()
+                        .allocate(*ip, handshake.get_peer_static_public())?;
+                    *ip = allocated_ip;
+                }
+                // TODO: handle regular wg implementations
+                handshake.assigned_ip = Some(*ip);
             }
-            // TODO: handle regular wg implementations
 
-            handshake.assigned_ip = Some(*ip);
             handshake.receive_handshake_initialization(p, dst)?
         };
 

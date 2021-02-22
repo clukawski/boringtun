@@ -498,7 +498,9 @@ impl Handshake {
             [0; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ];
 
         // Get assigned ip from handshake response
-        OPEN!(arb_payload, key, 0, packet.arbitrary_payload, hash)?;
+        if let Some(arbitrary_payload) = packet.arbitrary_payload {
+            OPEN!(arb_payload, key, 0, arbitrary_payload, hash)?;
+        }
 
         // responder.hash = HASH(responder.hash || msg.encrypted_nothing)
         // hash = HASH!(hash, buf[ENC_NOTHING_OFF..ENC_NOTHING_OFF + ENC_NOTHING_SZ]);
@@ -690,7 +692,8 @@ impl Handshake {
         &mut self,
         dst: &'a mut [u8],
     ) -> Result<(&'a mut [u8], Session), WireGuardError> {
-        if dst.len() < super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ {
+        let dst_len = dst.len();
+        if dst_len < super::HANDSHAKE_RESP_SZ {
             return Err(WireGuardError::DestinationBufferTooSmall);
         }
 
@@ -707,13 +710,17 @@ impl Handshake {
             }
         };
 
+        let mut arbitrary_data: &mut [u8] = &mut [];
         let (message_type, rest) = dst.split_at_mut(4);
         let (sender_index, rest) = rest.split_at_mut(4);
         let (receiver_index, rest) = rest.split_at_mut(4);
         let (unencrypted_ephemeral, rest) = rest.split_at_mut(32);
         let (mut encrypted_nothing, rest) = rest.split_at_mut(16);
-        let (_, rest) = rest.split_at_mut(32);
-        let (mut arbitrary_data, _) = rest.split_at_mut(super::HANDSHAKE_ARB_DATA_SZ);
+        // Only mutate the arbitrary data if we have it
+        if dst_len == super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ {
+            let (_, rest) = rest.split_at_mut(32);
+            arbitrary_data = rest.split_at_mut(super::HANDSHAKE_ARB_DATA_SZ).0;
+        }
 
         // responder.ephemeral_private = DH_GENERATE()
         let ephemeral_private = X25519SecretKey::new();
@@ -768,7 +775,9 @@ impl Handshake {
         let arb_data_concat = arb_data_vec.as_slice();
 
         // Seal assigned IP
-        SEAL!(arbitrary_data, key, 0, arb_data_concat, hash);
+        if arbitrary_data.len() == super::HANDSHAKE_ARB_DATA_SZ {
+            SEAL!(arbitrary_data, key, 0, arb_data_concat, hash);
+        }
 
         // Derive keys
         // temp1 = HMAC(initiator.chaining_key, [empty])
