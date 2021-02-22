@@ -436,7 +436,7 @@ impl Handshake {
             },
         );
 
-        self.format_handshake_response(dst)
+        self.format_handshake_response(dst, packet.arbitrary_payload.is_some())
     }
 
     pub(super) fn receive_handshake_response(
@@ -691,6 +691,7 @@ impl Handshake {
     fn format_handshake_response<'a>(
         &mut self,
         dst: &'a mut [u8],
+        is_neutrino: bool,
     ) -> Result<(&'a mut [u8], Session), WireGuardError> {
         let dst_len = dst.len();
         if dst_len < super::HANDSHAKE_RESP_SZ {
@@ -717,7 +718,7 @@ impl Handshake {
         let (unencrypted_ephemeral, rest) = rest.split_at_mut(32);
         let (mut encrypted_nothing, rest) = rest.split_at_mut(16);
         // Only mutate the arbitrary data if we have it
-        if dst_len == super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ {
+        if is_neutrino {
             let (_, rest) = rest.split_at_mut(32);
             arbitrary_data = rest.split_at_mut(super::HANDSHAKE_ARB_DATA_SZ).0;
         }
@@ -791,10 +792,13 @@ impl Handshake {
         let temp2 = HMAC!(temp1, [0x01]);
         let temp3 = HMAC!(temp1, temp2, [0x02]);
 
-        let dst = self.append_mac1_and_mac2(
-            local_index,
-            &mut dst[..super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ],
-        )?;
+        let hs_resp_sz = if is_neutrino {
+            super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ
+        } else {
+            super::HANDSHAKE_RESP_SZ
+        };
+
+        let dst = self.append_mac1_and_mac2(local_index, &mut dst[..hs_resp_sz])?;
 
         let arb_data = super::HandshakeArbData {
             endpoints: None,
