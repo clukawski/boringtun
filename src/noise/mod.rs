@@ -83,7 +83,8 @@ const COOKIE_REPLY: MessageType = 3;
 const DATA: MessageType = 4;
 
 const HANDSHAKE_INIT_SZ: usize = 148;
-const HANDSHAKE_INIT_ARB_SZ: usize = HANDSHAKE_INIT_SZ + 1;
+const HANDSHAKE_INIT_ARB_DATA_SZ: usize = 1;
+const HANDSHAKE_INIT_ARB_SZ: usize = HANDSHAKE_INIT_SZ + HANDSHAKE_INIT_ARB_DATA_SZ;
 const HANDSHAKE_RESP_SZ: usize = 92;
 const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
