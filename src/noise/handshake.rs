@@ -821,10 +821,14 @@ fn arb_decapsulate(data: [u8; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ]) -> super::
         }
         endpoints.push(endpoint);
     }
-    let endpoints_array: super::HandshakeEndpoints = endpoints.try_into().unwrap();
+
+    let endpoints_array: Result<super::HandshakeEndpoints, _> = endpoints.try_into();
 
     super::HandshakeArbData {
-        endpoints: Some(endpoints_array),
+        endpoints: match endpoints_array {
+            Ok(endpoints) => Some(endpoints),
+            Err(_) => None,
+        },
         assigned_ip: ip,
     }
 }
