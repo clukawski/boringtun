@@ -573,10 +573,13 @@ impl Handshake {
     ) -> Result<&'a mut [u8], WireGuardError> {
         // Handle adding 4 arbitrary bytes at the end of a handshake response
         // We need to adjust the mac offsets when adding data after this so they're still in the right place
-        let mut arb_off = 0;
-        if dst.len() == super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ {
-            arb_off = super::HANDSHAKE_ARB_DATA_SZ;
-        }
+        let arb_off = if dst.len() == super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ {
+            super::HANDSHAKE_ARB_DATA_SZ
+        } else if dst.len() == super::HANDSHAKE_INIT_SZ + super::HANDSHAKE_INIT_ARB_DATA_SZ {
+            super::HANDSHAKE_INIT_ARB_DATA_SZ
+        } else {
+            0
+        };
 
         // Add fixed arb_off to mac offsets if set.
         let mac1_off = dst.len() - (32 + arb_off);
@@ -621,7 +624,8 @@ impl Handshake {
         let (sender_index, rest) = rest.split_at_mut(4);
         let (unencrypted_ephemeral, rest) = rest.split_at_mut(32);
         let (mut encrypted_static, rest) = rest.split_at_mut(32 + 16);
-        let (mut encrypted_timestamp, _) = rest.split_at_mut(12 + 16);
+        let (mut encrypted_timestamp, rest) = rest.split_at_mut(12 + 16);
+        let (unencrypted_flag, _) = rest.split_at_mut(1);
 
         let local_index = self.inc_index();
 
@@ -685,7 +689,9 @@ impl Handshake {
             }),
         );
 
-        self.append_mac1_and_mac2(local_index, &mut dst[..super::HANDSHAKE_INIT_SZ])
+        unencrypted_flag.copy_from_slice(&[0]);
+
+        self.append_mac1_and_mac2(local_index, &mut dst[..super::HANDSHAKE_INIT_ARB_SZ])
     }
 
     fn format_handshake_response<'a>(
