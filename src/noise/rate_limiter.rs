@@ -164,8 +164,16 @@ impl RateLimiter {
         if let Packet::HandshakeInit(HandshakeInit { sender_idx, .. })
         | Packet::HandshakeResponse(HandshakeResponse { sender_idx, .. }) = packet
         {
-            let (msg, mac1, mac2) = if src.len() == super::HANDSHAKE_RESP_SZ+super::HANDSHAKE_ARB_DATA_SZ {
-                let (msg, macs) = src.split_at(src.len() - (32+super::HANDSHAKE_ARB_DATA_SZ));
+            let (msg, mac1, mac2) = if src.len()
+                == super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ
+            {
+                let (msg, macs) = src.split_at(src.len() - (32 + super::HANDSHAKE_ARB_DATA_SZ));
+                let (mac1, mac2_and_arb) = macs.split_at(16);
+                let (mac2, _) = mac2_and_arb.split_at(16);
+                (msg, mac1, mac2)
+            } else if src.len() == super::HANDSHAKE_INIT_SZ + super::HANDSHAKE_INIT_ARB_DATA_SZ {
+                let (msg, macs) =
+                    src.split_at(src.len() - (32 + super::HANDSHAKE_INIT_ARB_DATA_SZ));
                 let (mac1, mac2_and_arb) = macs.split_at(16);
                 let (mac2, _) = mac2_and_arb.split_at(16);
                 (msg, mac1, mac2)
