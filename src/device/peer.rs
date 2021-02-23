@@ -194,7 +194,7 @@ impl<S: Sock> Peer<S> {
         let endpoints = endpoints_lock.deref().clone();
         let endpoints_len: usize = endpoints.len();
         let n: usize = rng.gen_range(0..endpoints_len + 1);
-        if n == endpoints_len + 1 {
+        if n == endpoints_len + 1 || endpoints_len == 0 {
             return Arc::clone(&self.endpoint);
         }
 
