@@ -81,10 +81,9 @@ const HANDSHAKE_INIT: MessageType = 1;
 const HANDSHAKE_RESP: MessageType = 2;
 const COOKIE_REPLY: MessageType = 3;
 const DATA: MessageType = 4;
+const HANDSHAKE_INIT_NEUTRINO: MessageType = 5;
 
 const HANDSHAKE_INIT_SZ: usize = 148;
-const HANDSHAKE_INIT_ARB_DATA_SZ: usize = 1;
-const HANDSHAKE_INIT_ARB_SZ: usize = HANDSHAKE_INIT_SZ + HANDSHAKE_INIT_ARB_DATA_SZ;
 const HANDSHAKE_RESP_SZ: usize = 92;
 const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
@@ -115,7 +114,7 @@ pub struct HandshakeInit<'a> {
     unencrypted_ephemeral: &'a [u8],
     encrypted_static: &'a [u8],
     encrypted_timestamp: &'a [u8],
-    pub arbitrary_payload: Option<&'a [u8]>,
+    pub arbitrary_payload: Option<()>,
 }
 
 #[derive(Debug)]
@@ -309,12 +308,12 @@ impl Tunn {
                 arbitrary_payload: None,
             }),
             // Set the arbitrary data if we have it
-            (HANDSHAKE_INIT, HANDSHAKE_INIT_ARB_SZ) => Packet::HandshakeInit(HandshakeInit {
+            (HANDSHAKE_INIT_NEUTRINO, HANDSHAKE_INIT_SZ) => Packet::HandshakeInit(HandshakeInit {
                 sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
                 unencrypted_ephemeral: &src[8..40],
                 encrypted_static: &src[40..88],
                 encrypted_timestamp: &src[88..116],
-                arbitrary_payload: Some(&src[148..HANDSHAKE_INIT_ARB_SZ]),
+                arbitrary_payload: Some(()),
             }),
             // We probably don't need this case, but maybe in the future we can make the client
             // compatible with regular wg servers?
