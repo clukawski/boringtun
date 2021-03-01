@@ -278,6 +278,9 @@ mod tests {
                     use_connected_socket: true,
                     #[cfg(target_os = "linux")]
                     use_multi_queue: true,
+                    listen_port: 0,
+                    tun_name: None,
+                    ip_list: None,
                 },
             )
         }
@@ -286,7 +289,7 @@ mod tests {
         fn init_with_config(addr_v4: IpAddr, addr_v6: IpAddr, config: DeviceConfig) -> WGHandle {
             // Generate a new name, utun100+ should work on macOS and Linux
             let name = format!("utun{}", NEXT_IFACE_IDX.fetch_add(1, Ordering::Relaxed));
-            let _device = DeviceHandle::new(&name, config).unwrap();
+            let _device = DeviceHandle::new(&name, config, None).unwrap();
             WGHandle {
                 _device,
                 name,
@@ -568,6 +571,9 @@ mod tests {
                 use_connected_socket: false,
                 #[cfg(target_os = "linux")]
                 use_multi_queue: true,
+                listen_port: 0,
+                tun_name: None,
+                ip_list: None,
             },
         );
 
@@ -728,6 +734,9 @@ mod tests {
                 use_connected_socket: false,
                 #[cfg(target_os = "linux")]
                 use_multi_queue: true,
+                listen_port: 0,
+                tun_name: None,
+                ip_list: None,
             },
         );
 

@@ -23,6 +23,7 @@ pub struct Session {
     sender: ChaCha20Poly1305,
     sending_key_counter: AtomicUsize,
     receiving_key_counter: Mutex<ReceivingKeyCounterValidator>,
+    pub arb_data: super::HandshakeArbData,
 }
 
 impl std::fmt::Debug for Session {
@@ -159,6 +160,7 @@ impl Session {
         peer_index: u32,
         receiving_key: [u8; 32],
         sending_key: [u8; 32],
+        arb_data: super::HandshakeArbData,
     ) -> Session {
         Session {
             receiving_index: local_index,
@@ -175,6 +177,7 @@ impl Session {
             sender: ChaCha20Poly1305::new_aead(&sending_key[..]),
             sending_key_counter: AtomicUsize::new(0),
             receiving_key_counter: Mutex::new(Default::default()),
+            arb_data,
         }
     }
 

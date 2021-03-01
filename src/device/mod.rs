@@ -6,6 +6,7 @@ pub mod api;
 mod dev_lock;
 pub mod drop_privileges;
 mod integration_tests;
+pub mod ip_list;
 pub mod peer;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -28,11 +29,16 @@ pub mod tun;
 #[path = "udp_unix.rs"]
 pub mod udp;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::convert::From;
+use std::convert::TryFrom;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::os::unix::io::AsRawFd;
+use std::process::exit;
+use std::process::Command;
+use std::str;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -44,6 +50,7 @@ use crate::noise::handshake::parse_handshake_anon;
 use crate::noise::rate_limiter::RateLimiter;
 use crate::noise::*;
 use allowed_ips::*;
+use ip_list::*;
 use peer::*;
 use poll::*;
 use tun::*;
@@ -128,12 +135,16 @@ pub struct DeviceHandle<T: Tun = TunSocket, S: Sock = UDPSocket> {
     threads: Vec<JoinHandle<()>>,
 }
 
+// TODO: add listen port to config
 pub struct DeviceConfig {
     pub n_threads: usize,
     pub use_connected_socket: bool,
     pub logger: Logger,
     #[cfg(target_os = "linux")]
     pub use_multi_queue: bool,
+    pub listen_port: u16,
+    pub tun_name: Option<String>,
+    pub ip_list: Option<Arc<Mutex<IpList>>>,
 }
 
 impl Default for DeviceConfig {
@@ -144,6 +155,9 @@ impl Default for DeviceConfig {
             logger: Logger::root(Discard, o!()),
             #[cfg(target_os = "linux")]
             use_multi_queue: true,
+            listen_port: 0,
+            tun_name: None,
+            ip_list: None,
         }
     }
 }
@@ -183,10 +197,19 @@ struct ThreadData<T: Tun> {
 }
 
 impl<T: Tun, S: Sock> DeviceHandle<T, S> {
-    pub fn new(name: &str, config: DeviceConfig) -> Result<DeviceHandle<T, S>, Error> {
+    pub fn new(
+        name: &str,
+        config: DeviceConfig,
+        pkey: Option<X25519SecretKey>,
+    ) -> Result<DeviceHandle<T, S>, Error> {
         let n_threads = config.n_threads;
+        let port = config.listen_port;
         let mut wg_interface = Device::<T, S>::new(name, config)?;
-        wg_interface.open_listen_socket(0)?; // Start listening on a random port
+        // set private key if provided
+        if let Some(private_key) = pkey {
+            wg_interface.set_key(private_key);
+        }
+        wg_interface.open_listen_socket(port)?; // Start listening on a random port
 
         let interface_lock = Arc::new(Lock::new(wg_interface));
 
@@ -295,6 +318,16 @@ impl<T: Tun, S: Sock> Device<T, S> {
     }
 
     fn remove_peer(&mut self, pub_key: &X25519PublicKey) {
+        if let Some(peer_data) = self.peers.get(pub_key) {
+            println!("removing peer tunnel {:?}", peer_data.get_assigned_ip(),);
+            let peer_ip = peer_data.get_assigned_ip();
+            let static_public: [u8; 32] = *<&[u8; 32]>::try_from(pub_key.as_bytes()).unwrap();
+            match &self.config.ip_list {
+                Some(list) => list.clone().lock().deallocate(peer_ip, static_public),
+                None => {}
+            }
+        }
+
         if let Some(peer) = self.peers.remove(pub_key) {
             // Found a peer to remove, now purge all references to it:
             peer.shutdown_endpoint(); // close open udp socket and free the closure
@@ -343,6 +376,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             keepalive,
             next_index,
             None,
+            self.config.ip_list.clone(),
         )
         .unwrap();
 
@@ -637,6 +671,13 @@ impl<T: Tun, S: Sock> Device<T, S> {
                         Some(peer) => peer,
                     };
 
+                    let mut handshake_resp = false;
+
+                    // Setup network if we have the ip from the handshake response
+                    if let Packet::HandshakeResponse(_) = &parsed_packet {
+                        handshake_resp = true;
+                    }
+
                     // We found a peer, use it to decapsulate the message+
                     let mut flush = false; // Are there packets to send from the queue?
                     match peer
@@ -677,6 +718,14 @@ impl<T: Tun, S: Sock> Device<T, S> {
                         if let Ok(sock) = peer.connect_endpoint(d.listen_port, d.fwmark) {
                             d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
                                 .unwrap();
+                            // If we have the interface name and this is a handshake response, set up the new interface address
+                            if let Some(t) = &d.config.tun_name {
+                                if handshake_resp {
+                                    let tun_aip = peer.tunnel.assigned_ip.lock();
+                                    let assigned_ip = *tun_aip;
+                                    setup_interface(&assigned_ip, &t);
+                                }
+                            }
                         }
                     }
 
@@ -816,5 +865,30 @@ impl<T: Tun, S: Sock> Device<T, S> {
             }),
         )?;
         Ok(())
+    }
+}
+
+fn setup_interface(ip: &[u8], tun_name: &str) {
+    if ip.len() != 5 {
+        return;
+    }
+
+    // If the ip range is exhausted, we'll get 0.0.0.0/0, and the client should quit
+    if ip == [0, 0, 0, 0, 0] {
+        eprintln!("Failed to get address from server peer: {:?}", ip);
+        exit(1);
+    }
+
+    // Set the interface address if provided, additional configuration will be done externally
+    if let Err(e) = Command::new("/sbin/ip")
+        .arg("addr")
+        .arg("add")
+        .arg(format!("{}.{}.{}.{}/{}", ip[0], ip[1], ip[2], ip[3], ip[4]))
+        .arg("dev")
+        .arg(tun_name)
+        .status()
+    {
+        eprintln!("Failed to add interface address: {:?}", e);
+        exit(1)
     }
 }

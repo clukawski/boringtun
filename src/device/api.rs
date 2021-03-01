@@ -12,6 +12,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::Ordering;
+extern crate json;
 
 const SOCK_DIR: &str = "/var/run/wireguard/";
 
@@ -62,8 +63,10 @@ impl<T: Tun, S: Sock> Device<T, S> {
                     cmd.pop(); // pop the new line character
                     let status = match cmd.as_ref() {
                         // Only two commands are legal according to the protocol, get=1 and set=1.
+                        // Added json=1 to mimick the get=1 but otuput json for easy parsing
                         "get=1" => api_get(&mut writer, d),
                         "set=1" => api_set(&mut reader, d),
+                        "json=1" => api_get_json(&mut writer, d),
                         _ => EIO,
                     };
                     // The protocol requires to return an error code as the response, or zero on success
@@ -161,6 +164,44 @@ fn api_get<T: Tun, S: Sock>(writer: &mut BufWriter<&UnixStream>, d: &Device<T, S
         writeln!(writer, "rx_bytes={}", rx_bytes);
         writeln!(writer, "tx_bytes={}", tx_bytes);
     }
+    0
+}
+
+// return json output
+#[allow(unused_must_use)]
+fn api_get_json<T: Tun, S: Sock>(writer: &mut BufWriter<&UnixStream>, d: &Device<T, S>) -> i32 {
+    let mut data = json::JsonValue::new_array();
+
+    for (k, p) in d.peers.iter() {
+        let mut peer = json::JsonValue::new_object();
+
+        peer["public_key"] = base64::encode(k.as_bytes()).into();
+
+        if let Some(keepalive) = p.persistent_keepalive() {
+            peer["persistent_keepalive_interval"] = keepalive.into();
+        }
+
+        if let Some(fwmark) = d.fwmark {
+            peer["fwmark"] = fwmark.into();
+        }
+
+        for (_, ip, _) in p.allowed_ips() {
+            peer["allowed_ip"] = ip.to_string().into();
+        }
+
+        if let Some(time) = p.time_since_last_handshake() {
+            peer["last_handshake_time_sec"] = time.as_secs().into();
+        }
+
+        let (_, tx_bytes, rx_bytes, ..) = p.tunnel.stats();
+
+        peer["rx_bytes"] = rx_bytes.into();
+        peer["tx_bytes"] = tx_bytes.into();
+
+        data.push(peer);
+    }
+    // write the json
+    writeln!(writer, "{}", data.dump());
     0
 }
 

@@ -212,6 +212,7 @@ pub unsafe extern "C" fn new_tunnel(
         keep_alive,
         index,
         None,
+        None,
     ) {
         Ok(t) => t,
         Err(_) => return ptr::null_mut(),
