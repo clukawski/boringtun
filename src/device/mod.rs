@@ -729,7 +729,6 @@ impl<T: Tun, S: Sock> Device<T, S> {
                     peer.set_endpoint(addr);
 
                     if handshake_resp {
-                        // TODO:
                         peer.populate_endpoints();
                     }
 
