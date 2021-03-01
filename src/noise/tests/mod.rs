@@ -185,6 +185,7 @@ mod tests {
             None,
             100,
             None,
+            None,
         )
         .unwrap();
 

@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use crate::device::*;
-use parking_lot::RwLock;
-use std::net::IpAddr;
+use parking_lot::{Mutex, RwLock};
+use rand::{thread_rng, Rng};
 use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr};
+use std::ops::Deref;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Default, Debug)]
 pub struct Endpoint<S: Sock> {
@@ -16,9 +19,11 @@ pub struct Endpoint<S: Sock> {
 pub struct Peer<S: Sock> {
     pub(crate) tunnel: Box<Tunn>, // The associated tunnel struct
     index: u32,                   // The index the tunnel uses
-    endpoint: RwLock<Endpoint<S>>,
+    endpoint: Arc<RwLock<Endpoint<S>>>,
+    endpoints: Arc<RwLock<Vec<Arc<RwLock<Endpoint<S>>>>>>,
     allowed_ips: AllowedIps<()>,
     preshared_key: Option<[u8; 32]>,
+    pub assigned_ip: Mutex<[u8; 5]>,
 }
 
 #[derive(Debug)]
@@ -53,20 +58,52 @@ impl<S: Sock> Peer<S> {
         allowed_ips: &[AllowedIP],
         preshared_key: Option<[u8; 32]>,
     ) -> Peer<S> {
+        let endpoints_vec: Vec<Arc<RwLock<Endpoint<S>>>> = Vec::new();
+
         Peer {
             tunnel,
             index,
-            endpoint: RwLock::new(Endpoint {
+            endpoint: Arc::new(RwLock::new(Endpoint {
                 addr: endpoint,
                 conn: None,
-            }),
+            })),
+            endpoints: Arc::new(RwLock::new(endpoints_vec)),
             allowed_ips: allowed_ips.iter().collect(),
             preshared_key,
+            assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
         }
     }
 
     pub fn update_timers<'a>(&self, dst: &'a mut [u8]) -> TunnResult<'a> {
         self.tunnel.update_timers(dst)
+    }
+
+    pub fn get_assigned_ip(&self) -> [u8; 5] {
+        *self.tunnel.assigned_ip.lock()
+    }
+
+    pub fn populate_endpoints(&self) {
+        let tunn_lock = self.tunnel.endpoints.as_ref().unwrap().lock();
+        let tunn_endpoints = *tunn_lock;
+
+        for endpoint in tunn_endpoints.iter() {
+            let endpoints_clone = self.endpoints.clone();
+
+            // TODO maybe put normal endpoint in here so we can simplify endpoint_rand()
+            let mut endpoints_mut = endpoints_clone.write();
+            (*endpoints_mut).push(Arc::new(RwLock::new(Endpoint {
+                addr: Some(SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(
+                        endpoint[0],
+                        endpoint[1],
+                        endpoint[2],
+                        endpoint[3],
+                    )),
+                    0,
+                )),
+                conn: None,
+            })));
+        }
     }
 
     pub fn endpoint(&self) -> parking_lot::RwLockReadGuard<'_, Endpoint<S>> {
@@ -77,6 +114,23 @@ impl<S: Sock> Peer<S> {
         if let Some(conn) = self.endpoint.write().conn.take() {
             info!(self.tunnel.logger, "Disconnecting from endpoint");
             conn.shutdown();
+        }
+    }
+
+    pub fn shutdown_endpoints(&self) {
+        // Shutdown the initial endpoint
+        if let Some(conn) = self.endpoint.write().conn.take() {
+            info!(self.tunnel.logger, "Disconnecting from endpoint");
+            conn.shutdown();
+        }
+
+        // Shutdown our list of additional endpoints, if any were passed in the handshake
+        let endpoints = self.endpoints.write();
+        for (i, endpoint) in endpoints.iter().enumerate() {
+            if let Some(conn) = endpoint.write().conn.take() {
+                info!(self.tunnel.logger, "Disconnecting from endpoint {}", i);
+                conn.shutdown();
+            }
         }
     }
 
@@ -130,6 +184,65 @@ impl<S: Sock> Peer<S> {
         endpoint.conn = Some(Arc::clone(&udp_conn));
 
         Ok(udp_conn)
+    }
+
+    pub fn endpoint_rand(&self) -> Arc<RwLock<Endpoint<S>>> {
+        let mut rng = thread_rng();
+
+        let endpoints_clone = self.endpoints.clone();
+        let endpoints_lock = endpoints_clone.read();
+        let endpoints = endpoints_lock.deref().clone();
+        let endpoints_len: usize = endpoints.len();
+        let n: usize = rng.gen_range(0..endpoints_len + 1);
+        if n == endpoints_len + 1 || endpoints_len == 0 {
+            return Arc::clone(&self.endpoint);
+        }
+
+        let deref_rand = &endpoints[n];
+
+        Arc::clone(&deref_rand)
+    }
+
+    pub fn connect_endpoints(
+        &self,
+        port: u16,
+        fwmark: Option<u32>,
+    ) -> Result<Vec<(IpAddr, Arc<S>)>, Error> {
+        let mut endpoints_sockets: Vec<(IpAddr, Arc<S>)> = Vec::new();
+        let endpoints = self.endpoints.write();
+        for e in endpoints.iter() {
+            let mut endpoint = e.write();
+            let udp_conn = Arc::new(match endpoint.addr {
+                Some(addr @ SocketAddr::V4(_)) => S::new()?
+                    .set_non_blocking()?
+                    .set_reuse()?
+                    .bind(port)?
+                    .connect(&addr)?,
+                Some(addr @ SocketAddr::V6(_)) => S::new6()?
+                    .set_non_blocking()?
+                    .set_reuse()?
+                    .bind(port)?
+                    .connect(&addr)?,
+                None => panic!("Attempt to connect to undefined endpoint"),
+            });
+
+            if let Some(fwmark) = fwmark {
+                udp_conn.set_fwmark(fwmark)?;
+            }
+
+            info!(
+                self.tunnel.logger,
+                "Connected endpoint :{}->{}",
+                port,
+                endpoint.addr.unwrap()
+            );
+
+            endpoint.conn = Some(Arc::clone(&udp_conn));
+
+            endpoints_sockets.push((endpoint.addr.unwrap().ip(), udp_conn));
+        }
+
+        Ok(endpoints_sockets)
     }
 
     pub fn is_allowed_ip<I: Into<IpAddr>>(&self, addr: I) -> bool {

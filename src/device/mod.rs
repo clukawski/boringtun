@@ -6,6 +6,7 @@ pub mod api;
 mod dev_lock;
 pub mod drop_privileges;
 mod integration_tests;
+pub mod ip_list;
 pub mod peer;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -28,11 +29,17 @@ pub mod tun;
 #[path = "udp_unix.rs"]
 pub mod udp;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::convert::From;
+use std::convert::TryFrom;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::os::unix::io::AsRawFd;
+use std::process::exit;
+use std::process::Command;
+use std::str;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -44,6 +51,7 @@ use crate::noise::handshake::parse_handshake_anon;
 use crate::noise::rate_limiter::RateLimiter;
 use crate::noise::*;
 use allowed_ips::*;
+use ip_list::*;
 use peer::*;
 use poll::*;
 use tun::*;
@@ -128,12 +136,17 @@ pub struct DeviceHandle<T: Tun = TunSocket, S: Sock = UDPSocket> {
     threads: Vec<JoinHandle<()>>,
 }
 
+// TODO: add listen port to config
 pub struct DeviceConfig {
     pub n_threads: usize,
     pub use_connected_socket: bool,
     pub logger: Logger,
     #[cfg(target_os = "linux")]
     pub use_multi_queue: bool,
+    pub peer_auth_script: Option<String>,
+    pub listen_port: u16,
+    pub tun_name: Option<String>,
+    pub ip_list: Option<Arc<Mutex<IpList>>>,
 }
 
 impl Default for DeviceConfig {
@@ -144,6 +157,10 @@ impl Default for DeviceConfig {
             logger: Logger::root(Discard, o!()),
             #[cfg(target_os = "linux")]
             use_multi_queue: true,
+            peer_auth_script: None,
+            listen_port: 0,
+            tun_name: None,
+            ip_list: None,
         }
     }
 }
@@ -183,10 +200,19 @@ struct ThreadData<T: Tun> {
 }
 
 impl<T: Tun, S: Sock> DeviceHandle<T, S> {
-    pub fn new(name: &str, config: DeviceConfig) -> Result<DeviceHandle<T, S>, Error> {
+    pub fn new(
+        name: &str,
+        config: DeviceConfig,
+        pkey: Option<X25519SecretKey>,
+    ) -> Result<DeviceHandle<T, S>, Error> {
         let n_threads = config.n_threads;
+        let port = config.listen_port;
         let mut wg_interface = Device::<T, S>::new(name, config)?;
-        wg_interface.open_listen_socket(0)?; // Start listening on a random port
+        // set private key if provided
+        if let Some(private_key) = pkey {
+            wg_interface.set_key(private_key);
+        }
+        wg_interface.open_listen_socket(port)?; // Start listening on a random port
 
         let interface_lock = Arc::new(Lock::new(wg_interface));
 
@@ -295,13 +321,23 @@ impl<T: Tun, S: Sock> Device<T, S> {
     }
 
     fn remove_peer(&mut self, pub_key: &X25519PublicKey) {
+        if let Some(peer_data) = self.peers.get(pub_key) {
+            println!("removing peer tunnel {:?}", peer_data.get_assigned_ip(),);
+            let peer_ip = peer_data.get_assigned_ip();
+            let static_public: [u8; 32] = *<&[u8; 32]>::try_from(pub_key.as_bytes()).unwrap();
+            match &self.config.ip_list {
+                Some(list) => list.clone().lock().deallocate(peer_ip, static_public),
+                None => {}
+            }
+        }
+
         if let Some(peer) = self.peers.remove(pub_key) {
             // Found a peer to remove, now purge all references to it:
-            peer.shutdown_endpoint(); // close open udp socket and free the closure
+            peer.shutdown_endpoints(); // close open udp socket and free the closure
             self.peers_by_idx.remove(&peer.index()); // peers_by_idx
             self.peers_by_ip
                 .remove(&|p: &Arc<Peer<S>>| Arc::ptr_eq(&peer, p)); // peers_by_ip
-
+            println!("removed peer");
             info!(peer.tunnel.logger, "Peer removed");
         }
     }
@@ -343,6 +379,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             keepalive,
             next_index,
             None,
+            self.config.ip_list.clone(),
         )
         .unwrap();
 
@@ -577,6 +614,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             }),
             std::time::Duration::from_millis(250),
         )?;
+
         Ok(())
     }
 
@@ -601,14 +639,14 @@ impl<T: Tun, S: Sock> Device<T, S> {
             Box::new(move |d, t| {
                 // Handler that handles anonymous packets over UDP
                 let mut iter = MAX_ITR;
-                let (private_key, public_key) = d.key_pair.as_ref().expect("Key not set");
-
-                let rate_limiter = d.rate_limiter.as_ref().unwrap();
-
                 // Loop while we have packets on the anonymous connection
                 while let Ok((addr, packet)) = udp.recvfrom(&mut t.src_buf[..]) {
+                    let (private_key, public_key) =
+                        d.key_pair.as_ref().expect("No Private Key set");
+
                     // The rate limiter initially checks mac1 and mac2, and optionally asks to send a cookie
-                    let parsed_packet =
+                    let parsed_packet = {
+                        let rate_limiter = d.rate_limiter.as_ref().unwrap();
                         match rate_limiter.verify_packet(Some(addr.ip()), packet, &mut t.dst_buf) {
                             Ok(packet) => packet,
                             Err(TunnResult::WriteToNetwork(cookie)) => {
@@ -616,26 +654,42 @@ impl<T: Tun, S: Sock> Device<T, S> {
                                 continue;
                             }
                             Err(_) => continue,
-                        };
-
-                    let peer = match &parsed_packet {
-                        Packet::HandshakeInit(p) => {
-                            parse_handshake_anon(&private_key, &public_key, &p)
-                                .ok()
-                                .and_then(|hh| {
-                                    d.peers
-                                        .get(&X25519PublicKey::from(&hh.peer_static_public[..]))
-                                })
                         }
-                        Packet::HandshakeResponse(p) => d.peers_by_idx.get(&(p.receiver_idx >> 8)),
-                        Packet::PacketCookieReply(p) => d.peers_by_idx.get(&(p.receiver_idx >> 8)),
-                        Packet::PacketData(p) => d.peers_by_idx.get(&(p.receiver_idx >> 8)),
+                    };
+                    // find the peer
+                    let peer = {
+                        match &parsed_packet {
+                            Packet::HandshakeInit(p) => {
+                                match parse_handshake_anon(&private_key, &public_key, &p) {
+                                    Ok(hh) => {
+                                        check_auth(&hh, d);
+                                        d.peers
+                                            .get(&X25519PublicKey::from(&hh.peer_static_public[..]))
+                                    }
+                                    Err(_) => None,
+                                }
+                            }
+                            Packet::HandshakeResponse(p) => {
+                                d.peers_by_idx.get(&(p.receiver_idx >> 8))
+                            }
+                            Packet::PacketCookieReply(p) => {
+                                d.peers_by_idx.get(&(p.receiver_idx >> 8))
+                            }
+                            Packet::PacketData(p) => d.peers_by_idx.get(&(p.receiver_idx >> 8)),
+                        }
                     };
 
                     let peer = match peer {
                         None => continue,
                         Some(peer) => peer,
                     };
+
+                    let mut handshake_resp = false;
+
+                    // Setup network if we have the ip from the handshake response
+                    if let Packet::HandshakeResponse(_) = &parsed_packet {
+                        handshake_resp = true;
+                    }
 
                     // We found a peer, use it to decapsulate the message+
                     let mut flush = false; // Are there packets to send from the queue?
@@ -673,10 +727,33 @@ impl<T: Tun, S: Sock> Device<T, S> {
                     // This packet was OK, that means we want to create a connected socket for this peer
                     let ip_addr = addr.ip();
                     peer.set_endpoint(addr);
+
+                    if handshake_resp {
+                        // TODO:
+                        peer.populate_endpoints();
+                    }
+
                     if d.config.use_connected_socket {
                         if let Ok(sock) = peer.connect_endpoint(d.listen_port, d.fwmark) {
                             d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
                                 .unwrap();
+
+                            if let Ok(sockets) = peer.connect_endpoints(0, d.fwmark) {
+                                // Setup our fixed second endpoint
+                                for (addr, sock) in sockets {
+                                    d.register_conn_handler(Arc::clone(peer), sock, addr)
+                                        .unwrap();
+                                }
+                            }
+
+                            // If we have the interface name and this is a handshake response, set up the new interface address
+                            if let Some(t) = &d.config.tun_name {
+                                if handshake_resp {
+                                    let tun_aip = peer.tunnel.assigned_ip.lock();
+                                    let assigned_ip = *tun_aip;
+                                    setup_interface(&assigned_ip, &t);
+                                }
+                            }
                         }
                     }
 
@@ -797,7 +874,8 @@ impl<T: Tun, S: Sock> Device<T, S> {
                         TunnResult::Done => {}
                         TunnResult::Err(e) => error!(d.config.logger, "Encapsulate error {:?}", e),
                         TunnResult::WriteToNetwork(packet) => {
-                            let endpoint = peer.endpoint();
+                            let endpoint_ref = peer.endpoint_rand();
+                            let endpoint = endpoint_ref.as_ref().read();
                             if let Some(ref conn) = endpoint.conn {
                                 // Prefer to send using the connected socket
                                 conn.write(packet);
@@ -816,5 +894,113 @@ impl<T: Tun, S: Sock> Device<T, S> {
             }),
         )?;
         Ok(())
+    }
+}
+
+// check external auth for the provided public key, if it exists, create a new peer and return it
+fn check_auth<T: Tun, S: Sock>(hh: &handshake::HalfHandshake, d: &mut LockReadGuard<Device<T, S>>) {
+    d.try_writeable(
+        |device| device.trigger_yield(),
+        |mut device| {
+            device.cancel_yield();
+
+            // check if we have an auth script to try
+            let auth_script = match &device.config.peer_auth_script {
+                Some(auth_script) => auth_script,
+                None => return,
+            };
+
+            let pub_key = &X25519PublicKey::from(&hh.peer_static_public[..]);
+            // check if we have a peer already and return
+            if device.peers.get(pub_key).is_some() {
+                return;
+            }
+
+            // call auth script: this MUST return ip in CIDR format x.x.x.x/32
+            let external_auth = Command::new(auth_script)
+                .arg("wg")
+                .arg("--pubkey")
+                .arg(base64::encode(pub_key.as_bytes()))
+                .output();
+
+            // response should contain the allowed ip + preshared-key seperated by new lines
+            if let Ok(out) = external_auth {
+                let auth_data = String::from_utf8(out.stdout).unwrap_or_default();
+                if !auth_data.is_empty() {
+                    let auth_parts: Vec<&str> = auth_data.split('\n').collect();
+                    if auth_parts.len() >= 2 {
+                        let ip = AllowedIP::from_str(&auth_parts[0]).ok();
+                        // parse the pre shared key
+                        match auth_parts[1].parse::<X25519PublicKey>() {
+                            Ok(preshared_key) => {
+                                let psk = Some(make_array(preshared_key.as_bytes()));
+                                match ip {
+                                    Some(allowed_ip) => {
+                                        set_peer(
+                                            &mut device,
+                                            X25519PublicKey::from(&hh.peer_static_public[..]),
+                                            vec![allowed_ip],
+                                            psk,
+                                        );
+                                    }
+                                    None => return,
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("could not parse psk: {:?}", e);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    )
+    .unwrap()
+}
+
+fn set_peer<T: Tun, S: Sock>(
+    d: &mut Device<T, S>,
+    pub_key: X25519PublicKey,
+    allowed_ips: Vec<AllowedIP>,
+    preshared_key: Option<[u8; 32]>,
+) {
+    let remove = false;
+    let replace_ips = false;
+    let endpoint = None;
+    let keepalive = None;
+    d.update_peer(
+        pub_key,
+        remove,
+        replace_ips,
+        endpoint,
+        allowed_ips,
+        keepalive,
+        preshared_key,
+    );
+}
+
+fn setup_interface(ip: &[u8], tun_name: &str) {
+    if ip.len() != 5 {
+        return;
+    }
+
+    // If the ip range is exhausted, we'll get 0.0.0.0/0, and the client should quit
+    if ip == [0, 0, 0, 0, 0] {
+        eprintln!("Failed to get address from server peer: {:?}", ip);
+        exit(1);
+    }
+
+    // Set the interface address if provided, additional configuration will be done externally
+    if let Err(e) = Command::new("/sbin/ip")
+        .arg("addr")
+        .arg("add")
+        .arg(format!("{}.{}.{}.{}/{}", ip[0], ip[1], ip[2], ip[3], ip[4]))
+        .arg("dev")
+        .arg(tun_name)
+        .status()
+    {
+        eprintln!("Failed to add interface address: {:?}", e);
+        exit(1)
     }
 }

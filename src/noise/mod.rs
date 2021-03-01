@@ -10,6 +10,7 @@ mod tests;
 mod timers;
 
 use crate::crypto::x25519::*;
+use crate::device::ip_list::IpList;
 use crate::noise::errors::WireGuardError;
 use crate::noise::handshake::Handshake;
 use crate::noise::rate_limiter::RateLimiter;
@@ -66,6 +67,9 @@ pub struct Tunn {
     timers: timers::Timers, // Keeps tabs on the expiring timers
     tx_bytes: AtomicUsize,
     rx_bytes: AtomicUsize,
+    pub assigned_ip: Mutex<[u8; 5]>,
+    pub endpoints: Option<Mutex<HandshakeEndpoints>>,
+    ip_list: Option<Arc<Mutex<IpList>>>,
 
     rate_limiter: Arc<RateLimiter>,
 
@@ -77,11 +81,32 @@ const HANDSHAKE_INIT: MessageType = 1;
 const HANDSHAKE_RESP: MessageType = 2;
 const COOKIE_REPLY: MessageType = 3;
 const DATA: MessageType = 4;
+const HANDSHAKE_INIT_NEUTRINO: MessageType = 5;
 
 const HANDSHAKE_INIT_SZ: usize = 148;
 const HANDSHAKE_RESP_SZ: usize = 92;
 const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
+
+// Number of additional endpoints
+const HANDSHAKE_NUM_ENDPOINTS: usize = 4;
+// Size of the additional endpoints
+const HANDSHAKE_ENDPOINTS_SZ: usize = 4 * HANDSHAKE_NUM_ENDPOINTS;
+// Size of arbitrary data to append to handshake response
+// This is the size of your data + 16 bytes
+const HANDSHAKE_ARB_DATA_SZ: usize = 4 * HANDSHAKE_NUM_ENDPOINTS + 5 + 16;
+const HANDSHAKE_ARB_DATA_UNPACKED_SZ: usize = 4 * HANDSHAKE_NUM_ENDPOINTS + 5;
+// Size of the handshake response + arbritrary data (used in packet
+// pattern matching in Tunn::parse_incoming_packet)
+const HANDSHAKE_RESP_ARB_SZ: usize = HANDSHAKE_RESP_SZ + HANDSHAKE_ARB_DATA_SZ;
+
+pub type HandshakeEndpoints = [[u8; 4]; HANDSHAKE_ENDPOINTS_SZ];
+
+#[derive(Debug, Clone)]
+pub struct HandshakeArbData {
+    pub endpoints: Option<HandshakeEndpoints>,
+    pub assigned_ip: [u8; 5],
+}
 
 #[derive(Debug)]
 pub struct HandshakeInit<'a> {
@@ -89,6 +114,7 @@ pub struct HandshakeInit<'a> {
     unencrypted_ephemeral: &'a [u8],
     encrypted_static: &'a [u8],
     encrypted_timestamp: &'a [u8],
+    pub arbitrary_payload: Option<()>,
 }
 
 #[derive(Debug)]
@@ -97,6 +123,7 @@ pub struct HandshakeResponse<'a> {
     pub receiver_idx: u32,
     unencrypted_ephemeral: &'a [u8],
     encrypted_nothing: &'a [u8],
+    pub arbitrary_payload: Option<&'a [u8]>,
 }
 
 #[derive(Debug)]
@@ -131,6 +158,7 @@ impl Tunn {
         persistent_keepalive: Option<u16>,
         index: u32,
         rate_limiter: Option<Arc<RateLimiter>>,
+        ip_list: Option<Arc<Mutex<IpList>>>,
     ) -> Result<Box<Tunn>, &'static str> {
         let static_public = Arc::new(static_private.public_key());
 
@@ -158,6 +186,9 @@ impl Tunn {
             rate_limiter: rate_limiter.unwrap_or_else(|| {
                 Arc::new(RateLimiter::new(&static_public, PEER_HANDSHAKE_RATE_LIMIT))
             }),
+            assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
+            endpoints: None,
+            ip_list,
         };
 
         Ok(Box::new(tunn))
@@ -267,21 +298,44 @@ impl Tunn {
         }
 
         // Checks the type, as well as the reserved zero fields
+        // HANDSHAKE_RESP_SZ has been replaced with HANDSHAKE_RESP_ARB_SZ,
+        // which is a composition of HADSHAKE_RESP_SZ and HANDSHAKE_ARB_DATA_SZ
+        // as match pattern syntax doesn't allow for composition
         let packet_type = u32::from_le_bytes(make_array(&src[0..4]));
-
         Ok(match (packet_type, src.len()) {
             (HANDSHAKE_INIT, HANDSHAKE_INIT_SZ) => Packet::HandshakeInit(HandshakeInit {
                 sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
                 unencrypted_ephemeral: &src[8..40],
                 encrypted_static: &src[40..88],
                 encrypted_timestamp: &src[88..116],
+                arbitrary_payload: None,
             }),
+            // Set the arbitrary data if we have it
+            (HANDSHAKE_INIT_NEUTRINO, HANDSHAKE_INIT_SZ) => Packet::HandshakeInit(HandshakeInit {
+                sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
+                unencrypted_ephemeral: &src[8..40],
+                encrypted_static: &src[40..88],
+                encrypted_timestamp: &src[88..116],
+                arbitrary_payload: Some(()),
+            }),
+            // We probably don't need this case, but maybe in the future we can make the client
+            // compatible with regular wg servers?
             (HANDSHAKE_RESP, HANDSHAKE_RESP_SZ) => Packet::HandshakeResponse(HandshakeResponse {
                 sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
                 receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),
                 unencrypted_ephemeral: &src[12..44],
                 encrypted_nothing: &src[44..60],
+                arbitrary_payload: None,
             }),
+            (HANDSHAKE_RESP, HANDSHAKE_RESP_ARB_SZ) => {
+                Packet::HandshakeResponse(HandshakeResponse {
+                    sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
+                    receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),
+                    unencrypted_ephemeral: &src[12..44],
+                    encrypted_nothing: &src[44..60],
+                    arbitrary_payload: Some(&src[92..HANDSHAKE_RESP_ARB_SZ]),
+                })
+            }
             (COOKIE_REPLY, COOKIE_REPLY_SZ) => Packet::PacketCookieReply(PacketCookieReply {
                 receiver_idx: u32::from_le_bytes(make_array(&src[4..8])),
                 nonce: &src[8..32],
@@ -303,8 +357,24 @@ impl Tunn {
     ) -> Result<TunnResult<'a>, WireGuardError> {
         debug!(self.logger, "Received handshake_initiation"; "remote_idx" => p.sender_idx);
 
+        let mut ip = self.assigned_ip.lock();
+
         let (packet, session) = {
             let mut handshake = self.handshake.lock();
+            if p.arbitrary_payload.is_some() {
+                if self.ip_list.is_some() {
+                    let allocated_ip = self
+                        .ip_list
+                        .clone()
+                        .unwrap()
+                        .lock()
+                        .allocate(*ip, handshake.get_peer_static_public())?;
+                    *ip = allocated_ip;
+                }
+                // TODO: handle regular wg implementations
+                handshake.assigned_ip = Some(*ip);
+            }
+
             handshake.receive_handshake_initialization(p, dst)?
         };
 
@@ -333,11 +403,22 @@ impl Tunn {
             handshake.receive_handshake_response(p)?
         };
 
+        let peer_endpoints = &session.arb_data.endpoints.clone();
+        let mut ip = self.assigned_ip.lock();
+        *ip = session.arb_data.assigned_ip;
+
         let keepalive_packet = session.format_packet_data(&[], dst);
         // Store new session in ring buffer
         let l_idx = session.local_index();
         let index = l_idx % N_SESSIONS;
         *self.sessions[index].write() = Some(session);
+
+        if let Some(e) = &self.endpoints {
+            let mut endpoints = e.lock();
+            if let Some(session_endpoints) = *peer_endpoints {
+                *endpoints = session_endpoints;
+            }
+        }
 
         self.timer_tick(TimerName::TimeLastPacketReceived);
         self.timer_tick_session_established(true, index); // New session established, we are the initiator
