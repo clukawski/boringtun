@@ -13,11 +13,9 @@ use crate::device::drop_privileges::*;
 use crate::device::ip_list::IpList;
 use crate::device::*;
 use clap::{value_t, App, Arg};
-use crypto::x25519::X25519SecretKey;
 use daemonize::Daemonize;
 use parking_lot::Mutex;
 use slog::{error, info, o, Drain, Logger};
-use std::fs;
 use std::fs::File;
 use std::net::Ipv4Addr;
 use std::os::unix::net::UnixDatagram;
@@ -60,12 +58,6 @@ fn main() {
                 .env("WG_THREADS")
                 .help("Number of OS threads to use")
                 .default_value("4"),
-            Arg::with_name("private-key")
-                .takes_value(true)
-                .long("private-key")
-                .short("-k")
-                .env("WG_PRIVATE_KEY")
-                .help("Path to the private key"),
             Arg::with_name("dynamic-address-allocation")
                 .long("dynamic-address-allocation")
                 .short("-d")
@@ -121,22 +113,8 @@ fn main() {
         .unwrap_or_default()
         .parse()
         .unwrap_or_default();
-    let init_pkey = matches.value_of("private-key").unwrap_or_default();
     let cidr = matches.value_of("cidr").unwrap_or_default();
     let is_dynamic = !matches.is_present("dynamic-address-allocation");
-
-    let mut private_key = None;
-    //if init_pkey is set, read it and parse it
-    if init_pkey.len() > 0 {
-        let contents = fs::read_to_string(init_pkey).expect("could not read private key file");
-        private_key = match contents.trim().parse::<X25519SecretKey>() {
-            Ok(key) => Some(key),
-            Err(e) => {
-                eprintln!("Failed to parse private key: {:?}", e);
-                exit(1);
-            }
-        };
-    }
 
     // Create a socketpair to communicate between forked processes
     let (sock1, sock2) = UnixDatagram::pair().unwrap();
@@ -209,7 +187,7 @@ fn main() {
         is_dynamic,
     };
 
-    let mut device_handle: DeviceHandle = match DeviceHandle::new(&tun_name, config, private_key) {
+    let mut device_handle: DeviceHandle = match DeviceHandle::new(&tun_name, config) {
         Ok(d) => d,
         Err(e) => {
             // Notify parent that tunnel initialization failed

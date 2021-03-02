@@ -199,19 +199,11 @@ struct ThreadData<T: Tun> {
 }
 
 impl<T: Tun, S: Sock> DeviceHandle<T, S> {
-    pub fn new(
-        name: &str,
-        config: DeviceConfig,
-        pkey: Option<X25519SecretKey>,
-    ) -> Result<DeviceHandle<T, S>, Error> {
+    pub fn new(name: &str, config: DeviceConfig) -> Result<DeviceHandle<T, S>, Error> {
         let n_threads = config.n_threads;
         let port = config.listen_port;
         let mut wg_interface = Device::<T, S>::new(name, config)?;
-        // set private key if provided
-        if let Some(private_key) = pkey {
-            wg_interface.set_key(private_key);
-        }
-        wg_interface.open_listen_socket(port)?; // Start listening on a random port
+        wg_interface.open_listen_socket(port)?; // Start listening on a random port if not configured
 
         let interface_lock = Arc::new(Lock::new(wg_interface));
 
