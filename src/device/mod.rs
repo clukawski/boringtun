@@ -321,12 +321,12 @@ impl<T: Tun, S: Sock> Device<T, S> {
 
     fn remove_peer(&mut self, pub_key: &X25519PublicKey) {
         if let Some(peer_data) = self.peers.get(pub_key) {
-            println!("removing peer tunnel {:?}", peer_data.get_assigned_ip(),);
-            let peer_ip = peer_data.get_assigned_ip();
-            let static_public: [u8; 32] = *<&[u8; 32]>::try_from(pub_key.as_bytes()).unwrap();
-            match &self.config.ip_list {
-                Some(list) => list.clone().lock().deallocate(peer_ip, static_public),
-                None => {}
+            if let Some(peer_ip) = peer_data.get_assigned_ip() {
+                let static_public: [u8; 32] = *<&[u8; 32]>::try_from(pub_key.as_bytes()).unwrap();
+                match &self.config.ip_list {
+                    Some(list) => list.clone().lock().deallocate(peer_ip, static_public),
+                    None => {}
+                }
             }
         }
 
@@ -721,12 +721,14 @@ impl<T: Tun, S: Sock> Device<T, S> {
                         if let Ok(sock) = peer.connect_endpoint(d.listen_port, d.fwmark) {
                             d.register_conn_handler(Arc::clone(peer), sock, ip_addr)
                                 .unwrap();
-                            // If we have the interface name and this is a handshake response, set up the new interface address
+                            // If we have the interface name and this is a dynamic address allocation
+                            // handshake response, set up the new interface address
                             if let Some(t) = &d.config.tun_name {
                                 if handshake_resp {
                                     let tun_aip = peer.tunnel.assigned_ip.lock();
-                                    let assigned_ip = *tun_aip;
-                                    setup_interface(&assigned_ip, &t);
+                                    if let Some(ip) = *tun_aip {
+                                        setup_interface(&ip, &t);
+                                    }
                                 }
                             }
                         }

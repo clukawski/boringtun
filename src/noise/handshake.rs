@@ -803,7 +803,7 @@ impl Handshake {
         let dst = self.append_mac1_and_mac2(local_index, &mut dst[..hs_resp_sz])?;
 
         let arb_data = super::HandshakeArbData {
-            assigned_ip: self.assigned_ip.unwrap(),
+            assigned_ip: self.assigned_ip,
         };
 
         Ok((
@@ -814,7 +814,12 @@ impl Handshake {
 }
 
 fn arb_decapsulate(data: [u8; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ]) -> super::HandshakeArbData {
-    let ip: [u8; 5] = data[..5].try_into().unwrap();
+    let ip: Result<[u8; 5], _> = data[..5].try_into();
 
-    super::HandshakeArbData { assigned_ip: ip }
+    super::HandshakeArbData {
+        assigned_ip: match ip {
+            Ok(ip) => Some(ip),
+            Err(_) => None,
+        },
+    }
 }
