@@ -110,7 +110,6 @@ dependencies = [
  "daemonize",
  "hex",
  "jni",
- "json",
  "libc",
  "parking_lot",
  "rand",
@@ -354,12 +353,6 @@ checksum = "cf3d7383929f7c9c7c2d0fa596f325832df98c3704f2c60553080f7127a58175"
 dependencies = [
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "json"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "078e285eafdfb6c4b434e0d31e8cfcb5115b651496faca5749b88fafd4f23bfd"
 
 [[package]]
 name = "lazy_static"

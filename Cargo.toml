@@ -16,7 +16,6 @@ libc = "0.2"
 parking_lot = "0.10"
 slog = "2.5"
 slog-term = "2.5"
-json = "0.12"
 cidr = "0.1.1"
 rand = "0.8.3"
 
