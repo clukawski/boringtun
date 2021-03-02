@@ -66,6 +66,10 @@ fn main() {
                 .short("-k")
                 .env("WG_PRIVATE_KEY")
                 .help("Path to the private key"),
+            Arg::with_name("dynamic-address-allocation")
+                .long("dynamic-address-allocation")
+                .short("-d")
+                .help("Use dynamic address allocation"),
             Arg::with_name("cidr")
                 .takes_value(true)
                 .long("cidr")
@@ -119,6 +123,7 @@ fn main() {
         .unwrap_or_default();
     let init_pkey = matches.value_of("private-key").unwrap_or_default();
     let cidr = matches.value_of("cidr").unwrap_or_default();
+    let is_dynamic = !matches.is_present("dynamic-address-allocation");
 
     let mut private_key = None;
     //if init_pkey is set, read it and parse it
@@ -201,6 +206,7 @@ fn main() {
         listen_port: listen_port,
         tun_name: Some(tun_name.to_string()),
         ip_list: ip_list.clone(),
+        is_dynamic,
     };
 
     let mut device_handle: DeviceHandle = match DeviceHandle::new(&tun_name, config, private_key) {

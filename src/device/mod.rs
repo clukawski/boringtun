@@ -145,6 +145,7 @@ pub struct DeviceConfig {
     pub listen_port: u16,
     pub tun_name: Option<String>,
     pub ip_list: Option<Arc<Mutex<IpList>>>,
+    pub is_dynamic: bool,
 }
 
 impl Default for DeviceConfig {
@@ -158,6 +159,7 @@ impl Default for DeviceConfig {
             listen_port: 0,
             tun_name: None,
             ip_list: None,
+            is_dynamic: false,
         }
     }
 }
@@ -377,6 +379,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
             next_index,
             None,
             self.config.ip_list.clone(),
+            self.config.is_dynamic,
         )
         .unwrap();
 
