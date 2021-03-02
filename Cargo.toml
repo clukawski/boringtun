@@ -31,9 +31,6 @@ clap = { version = "2.33", default-features=false, features = ["suggestions"] }
 [target.'cfg(target_os="android")'.dependencies]
 jni = "0.10"
 
-[target.x86_64-unknown-linux-musl]
-linker = "x86_64-linux-musl-gcc"
-
 [lib]
 crate-type = ["lib", "staticlib", "dylib"]
 
