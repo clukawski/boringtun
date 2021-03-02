@@ -67,7 +67,7 @@ pub struct Tunn {
     timers: timers::Timers, // Keeps tabs on the expiring timers
     tx_bytes: AtomicUsize,
     rx_bytes: AtomicUsize,
-    pub assigned_ip: Mutex<[u8; 5]>,
+    pub assigned_ip: Mutex<Option<[u8; 5]>>,
     pub endpoints: Option<Mutex<HandshakeEndpoints>>,
     ip_list: Option<Arc<Mutex<IpList>>>,
     pub is_dynamic: bool,
@@ -108,7 +108,7 @@ pub type HandshakeEndpoints = [[u8; 4]; HANDSHAKE_ENDPOINTS_SZ];
 #[derive(Debug, Clone)]
 pub struct HandshakeArbData {
     pub endpoints: Option<HandshakeEndpoints>,
-    pub assigned_ip: [u8; 5],
+    pub assigned_ip: Option<[u8; 5]>,
 }
 
 #[derive(Debug)]
@@ -190,7 +190,7 @@ impl Tunn {
             rate_limiter: rate_limiter.unwrap_or_else(|| {
                 Arc::new(RateLimiter::new(&static_public, PEER_HANDSHAKE_RATE_LIMIT))
             }),
-            assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
+            assigned_ip: Mutex::new(None),
             endpoints: None,
             ip_list,
             is_dynamic,
@@ -369,11 +369,11 @@ impl Tunn {
                         .clone()
                         .unwrap()
                         .lock()
-                        .allocate(*ip, handshake.get_peer_static_public())?;
-                    *ip = allocated_ip;
+                        .allocate(ip.unwrap(), handshake.get_peer_static_public())?;
+                    *ip = Some(allocated_ip);
                 }
-                // TODO: handle regular wg implementations
-                handshake.assigned_ip = Some(*ip);
+
+                handshake.assigned_ip = *ip;
             }
 
             handshake.receive_handshake_initialization(p, dst)?
@@ -405,8 +405,10 @@ impl Tunn {
         };
 
         let peer_endpoints = &session.arb_data.endpoints.clone();
-        let mut ip = self.assigned_ip.lock();
-        *ip = session.arb_data.assigned_ip;
+        if session.arb_data.assigned_ip.is_some() {
+            let mut ip = self.assigned_ip.lock();
+            *ip = session.arb_data.assigned_ip;
+        }
 
         let keepalive_packet = session.format_packet_data(&[], dst);
         // Store new session in ring buffer

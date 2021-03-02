@@ -78,7 +78,7 @@ impl<S: Sock> Peer<S> {
         self.tunnel.update_timers(dst)
     }
 
-    pub fn get_assigned_ip(&self) -> [u8; 5] {
+    pub fn get_assigned_ip(&self) -> Option<[u8; 5]> {
         *self.tunnel.assigned_ip.lock()
     }
 

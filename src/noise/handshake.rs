@@ -810,7 +810,7 @@ impl Handshake {
 
         let arb_data = super::HandshakeArbData {
             endpoints: None,
-            assigned_ip: self.assigned_ip.unwrap(),
+            assigned_ip: self.assigned_ip,
         };
 
         Ok((
@@ -821,7 +821,7 @@ impl Handshake {
 }
 
 fn arb_decapsulate(data: [u8; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ]) -> super::HandshakeArbData {
-    let ip: [u8; 5] = data[..5].try_into().unwrap();
+    let ip: Result<[u8; 5], _> = data[..5].try_into();
     let mut endpoints = Vec::new();
     let endpoints_data: [u8; super::HANDSHAKE_ENDPOINTS_SZ] = data[5..].try_into().unwrap();
     for i in 1..super::HANDSHAKE_NUM_ENDPOINTS + 1 {
@@ -841,6 +841,9 @@ fn arb_decapsulate(data: [u8; super::HANDSHAKE_ARB_DATA_UNPACKED_SZ]) -> super::
             Ok(endpoints) => Some(endpoints),
             Err(_) => None,
         },
-        assigned_ip: ip,
+        assigned_ip: match ip {
+            Ok(ip) => Some(ip),
+            Err(_) => None,
+        },
     }
 }
