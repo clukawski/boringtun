@@ -176,6 +176,7 @@ pub unsafe extern "C" fn new_tunnel(
     index: u32,
     log_printer: Option<unsafe extern "C" fn(*const c_char)>,
     log_level: u32,
+    is_dynamic: bool,
 ) -> *mut Tunn {
     let c_str = CStr::from_ptr(static_private);
     let static_private = match c_str.to_str() {
@@ -213,6 +214,7 @@ pub unsafe extern "C" fn new_tunnel(
         index,
         None,
         None,
+        is_dynamic,
     ) {
         Ok(t) => t,
         Err(_) => return ptr::null_mut(),

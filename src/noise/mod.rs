@@ -70,6 +70,7 @@ pub struct Tunn {
     pub assigned_ip: Mutex<[u8; 5]>,
     pub endpoints: Option<Mutex<HandshakeEndpoints>>,
     ip_list: Option<Arc<Mutex<IpList>>>,
+    pub is_dynamic: bool,
 
     rate_limiter: Arc<RateLimiter>,
 
@@ -81,7 +82,7 @@ const HANDSHAKE_INIT: MessageType = 1;
 const HANDSHAKE_RESP: MessageType = 2;
 const COOKIE_REPLY: MessageType = 3;
 const DATA: MessageType = 4;
-const HANDSHAKE_INIT_NEUTRINO: MessageType = 5;
+const HANDSHAKE_INIT_DYNAMIC: MessageType = 5;
 
 const HANDSHAKE_INIT_SZ: usize = 148;
 const HANDSHAKE_RESP_SZ: usize = 92;
@@ -161,6 +162,7 @@ impl Tunn {
         index: u32,
         rate_limiter: Option<Arc<RateLimiter>>,
         ip_list: Option<Arc<Mutex<IpList>>>,
+        is_dynamic: bool,
     ) -> Result<Box<Tunn>, &'static str> {
         let static_public = Arc::new(static_private.public_key());
 
@@ -191,6 +193,7 @@ impl Tunn {
             assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
             endpoints: None,
             ip_list,
+            is_dynamic,
         };
 
         Ok(Box::new(tunn))
@@ -310,7 +313,7 @@ impl Tunn {
                 arbitrary_payload: None,
             }),
             // Set the arbitrary data if we have it
-            (HANDSHAKE_INIT_NEUTRINO, HANDSHAKE_INIT_SZ) => Packet::HandshakeInit(HandshakeInit {
+            (HANDSHAKE_INIT_DYNAMIC, HANDSHAKE_INIT_SZ) => Packet::HandshakeInit(HandshakeInit {
                 sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
                 unencrypted_ephemeral: &src[8..40],
                 encrypted_static: &src[40..88],
@@ -505,7 +508,7 @@ impl Tunn {
 
         let starting_new_handshake = !handshake.is_in_progress();
 
-        match handshake.format_handshake_initiation(dst) {
+        match handshake.format_handshake_initiation(dst, self.is_dynamic) {
             Ok(packet) => {
                 debug!(self.logger, "Sending handshake_initiation");
 

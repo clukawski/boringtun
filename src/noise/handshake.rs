@@ -614,6 +614,7 @@ impl Handshake {
     pub(super) fn format_handshake_initiation<'a>(
         &mut self,
         dst: &'a mut [u8],
+        is_dynamic: bool,
     ) -> Result<&'a mut [u8], WireGuardError> {
         if dst.len() < super::HANDSHAKE_INIT_SZ {
             return Err(WireGuardError::DestinationBufferTooSmall);
@@ -636,7 +637,12 @@ impl Handshake {
         let ephemeral_private = X25519SecretKey::new();
         // msg.message_type = 1
         // msg.reserved_zero = { 0, 0, 0 }
-        message_type.copy_from_slice(&super::HANDSHAKE_INIT_NEUTRINO.to_le_bytes());
+        let type_value = if is_dynamic {
+            super::HANDSHAKE_INIT_DYNAMIC.to_le_bytes()
+        } else {
+            super::HANDSHAKE_INIT.to_le_bytes()
+        };
+        message_type.copy_from_slice(&type_value);
         // msg.sender_index = little_endian(initiator.sender_index)
         sender_index.copy_from_slice(&local_index.to_le_bytes());
         //msg.unencrypted_ephemeral = DH_PUBKEY(initiator.ephemeral_private)
@@ -693,7 +699,7 @@ impl Handshake {
     fn format_handshake_response<'a>(
         &mut self,
         dst: &'a mut [u8],
-        is_neutrino: bool,
+        is_dynamic: bool,
     ) -> Result<(&'a mut [u8], Session), WireGuardError> {
         let dst_len = dst.len();
         if dst_len < super::HANDSHAKE_RESP_SZ {
@@ -720,7 +726,7 @@ impl Handshake {
         let (unencrypted_ephemeral, rest) = rest.split_at_mut(32);
         let (mut encrypted_nothing, rest) = rest.split_at_mut(16);
         // Only mutate the arbitrary data if we have it
-        if is_neutrino {
+        if is_dynamic {
             let (_, rest) = rest.split_at_mut(32);
             arbitrary_data = rest.split_at_mut(super::HANDSHAKE_ARB_DATA_SZ).0;
         }
@@ -794,7 +800,7 @@ impl Handshake {
         let temp2 = HMAC!(temp1, [0x01]);
         let temp3 = HMAC!(temp1, temp2, [0x02]);
 
-        let hs_resp_sz = if is_neutrino {
+        let hs_resp_sz = if is_dynamic {
             super::HANDSHAKE_RESP_SZ + super::HANDSHAKE_ARB_DATA_SZ
         } else {
             super::HANDSHAKE_RESP_SZ

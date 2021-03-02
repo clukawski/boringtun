@@ -73,6 +73,10 @@ fn main() {
                 .short("-i")
                 .env("WG_IFACE_ADDR")
                 .help("Interface address"),
+            Arg::with_name("dynamic-address-allocation")
+                .long("dynamic-address-allocation")
+                .short("-d")
+                .help("Use dynamic address allocation"),
             Arg::with_name("cidr")
                 .takes_value(true)
                 .long("cidr")
@@ -142,6 +146,7 @@ fn main() {
     let init_address = matches.value_of("address").unwrap_or_default();
     let cidr = matches.value_of("cidr").unwrap_or_default();
     let init_mtu = matches.value_of("mtu").unwrap_or_default();
+    let is_dynamic = !matches.is_present("dynamic-address-allocation");
 
     let mut private_key = None;
     //if init_pkey is set, read it and parse it
@@ -225,6 +230,7 @@ fn main() {
         listen_port: listen_port,
         tun_name: Some(tun_name.to_string()),
         ip_list: ip_list.clone(),
+        is_dynamic,
     };
 
     let mut device_handle: DeviceHandle = match DeviceHandle::new(&tun_name, config, private_key) {
