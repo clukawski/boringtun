@@ -62,7 +62,6 @@ impl<T: Tun, S: Sock> Device<T, S> {
                     cmd.pop(); // pop the new line character
                     let status = match cmd.as_ref() {
                         // Only two commands are legal according to the protocol, get=1 and set=1.
-                        // Added json=1 to mimick the get=1 but otuput json for easy parsing
                         "get=1" => api_get(&mut writer, d),
                         "set=1" => api_set(&mut reader, d),
                         _ => EIO,

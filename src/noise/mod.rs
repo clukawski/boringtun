@@ -89,7 +89,9 @@ const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
 
 // Size of arbitrary data to append to handshake response
-const HANDSHAKE_ARB_DATA_SZ: usize = HANDSHAKE_ARB_DATA_UNPACKED_SZ + 16;
+const HANDSHAKE_ARB_DATA_SZ: usize = HANDSHAKE_ARB_DATA_UNPACKED_SZ + HANDSHAKE_ARB_DATA_OFFSET;
+// 16 byte offset needed to SEAL!() 5 bytes for dynamically allocated address feature
+const HANDSHAKE_ARB_DATA_OFFSET: usize = 16;
 const HANDSHAKE_ARB_DATA_UNPACKED_SZ: usize = 5;
 // Size of the handshake response + arbritrary data (used in packet
 // pattern matching in Tunn::parse_incoming_packet)
@@ -292,7 +294,7 @@ impl Tunn {
 
         // Checks the type, as well as the reserved zero fields
         // HANDSHAKE_RESP_SZ has been replaced with HANDSHAKE_RESP_ARB_SZ,
-        // which is a composition of HADSHAKE_RESP_SZ and HANDSHAKE_ARB_DATA_SZ
+        // which is a composition of HANDSHAKE_RESP_SZ and HANDSHAKE_ARB_DATA_SZ
         // as match pattern syntax doesn't allow for composition
         let packet_type = u32::from_le_bytes(make_array(&src[0..4]));
         Ok(match (packet_type, src.len()) {
@@ -311,8 +313,7 @@ impl Tunn {
                 encrypted_timestamp: &src[88..116],
                 arbitrary_payload: Some(()),
             }),
-            // We probably don't need this case, but maybe in the future we can make the client
-            // compatible with regular wg servers?
+            // Used for compatibility with standard wireguard peers
             (HANDSHAKE_RESP, HANDSHAKE_RESP_SZ) => Packet::HandshakeResponse(HandshakeResponse {
                 sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
                 receiver_idx: u32::from_le_bytes(make_array(&src[8..12])),

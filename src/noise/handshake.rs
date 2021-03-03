@@ -599,7 +599,8 @@ impl Handshake {
         };
 
         if arb_off > 0 {
-            dst[mac2_off..mac2_off + 16].copy_from_slice(&msg_mac2[..]);
+            dst[mac2_off..mac2_off + super::HANDSHAKE_ARB_DATA_OFFSET]
+                .copy_from_slice(&msg_mac2[..]);
         } else {
             dst[mac2_off..].copy_from_slice(&msg_mac2[..]);
         }

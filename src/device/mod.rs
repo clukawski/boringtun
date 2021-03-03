@@ -135,7 +135,6 @@ pub struct DeviceHandle<T: Tun = TunSocket, S: Sock = UDPSocket> {
     threads: Vec<JoinHandle<()>>,
 }
 
-// TODO: add listen port to config
 pub struct DeviceConfig {
     pub n_threads: usize,
     pub use_connected_socket: bool,
