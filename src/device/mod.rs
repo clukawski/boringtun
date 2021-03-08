@@ -50,7 +50,7 @@ use crate::noise::handshake::parse_handshake_anon;
 use crate::noise::rate_limiter::RateLimiter;
 use crate::noise::*;
 use allowed_ips::*;
-use ip_list::*;
+use ip_list::IpList;
 use peer::*;
 use poll::*;
 use tun::*;
