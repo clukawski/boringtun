@@ -7,7 +7,7 @@ use std::ptr;
 
 use jni::objects::{JByteBuffer, JClass, JString};
 use jni::strings::JNIStr;
-use jni::sys::{jbyteArray, jint, jlong, jshort, jstring};
+use jni::sys::{jboolean, jbyteArray, jint, jlong, jshort, jstring};
 use jni::JNIEnv;
 
 use crate::crypto::x25519::X25519SecretKey;
@@ -134,6 +134,7 @@ pub unsafe extern "C" fn create_new_tunnel(
     arg_public_key: JString,
     keep_alive: jshort,
     index: jint,
+    is_dynamic: jboolean,
 ) -> jlong {
     let secret_key = match env.get_string_utf_chars(arg_secret_key) {
         Ok(v) => v,
@@ -152,6 +153,7 @@ pub unsafe extern "C" fn create_new_tunnel(
         index as u32,
         Some(log_print),
         3,
+        is_dynamic,
     );
 
     if tunnel.is_null() {

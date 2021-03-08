@@ -70,7 +70,8 @@ struct wireguard_tunnel *new_tunnel(const char *static_private,
                                     uint16_t keep_alive, // Keep alive interval in seconds
                                     uint32_t index,      // The 24bit index prefix to be used for session indexes
                                     void (*log_printer)(const char *),
-                                    enum log_level log_level);
+                                    enum log_level log_level,
+                                    bool is_dynamic);
 
 // Deallocate the tunnel
 void tunnel_free(struct wireguard_tunnel *);
