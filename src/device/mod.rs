@@ -751,10 +751,13 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             // If we have the interface name and this is a dynamic address allocation
                             // handshake response, set up the new interface address
                             if let Some(t) = &d.config.tun_name {
-                                if handshake_resp {
-                                    let tun_aip = peer.tunnel.assigned_ip.lock();
-                                    if let Some(ip) = *tun_aip {
-                                        setup_interface(&ip, &t);
+                                #[cfg(any(target_os = "linux", target_os = "macos"))]
+                                {
+                                    if handshake_resp {
+                                        let tun_aip = peer.tunnel.assigned_ip.lock();
+                                        if let Some(ip) = *tun_aip {
+                                            setup_interface(&ip, &t);
+                                        }
                                     }
                                 }
                             }
@@ -984,6 +987,7 @@ fn set_peer<T: Tun, S: Sock>(
     );
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn setup_interface(ip: &[u8], tun_name: &str) {
     if ip.len() != 5 {
         return;
@@ -996,15 +1000,29 @@ fn setup_interface(ip: &[u8], tun_name: &str) {
     }
 
     // Set the interface address if provided, additional configuration will be done externally
-    if let Err(e) = Command::new("/sbin/ip")
-        .arg("addr")
-        .arg("add")
-        .arg(format!("{}.{}.{}.{}/{}", ip[0], ip[1], ip[2], ip[3], ip[4]))
-        .arg("dev")
-        .arg(tun_name)
-        .status()
-    {
-        eprintln!("Failed to add interface address: {:?}", e);
-        exit(1)
-    }
+    if cfg!(linux) {
+        if let Err(e) = Command::new("/sbin/ip")
+            .arg("addr")
+            .arg("add")
+            .arg(format!("{}.{}.{}.{}/{}", ip[0], ip[1], ip[2], ip[3], ip[4]))
+            .arg("dev")
+            .arg(tun_name)
+            .status()
+        {
+            eprintln!("Failed to add interface address: {:?}", e);
+            exit(1)
+        }
+    } else if cfg!(macos) {
+        //sudo ifconfig en0 alias 128.133.123.83/24 up
+        if let Err(e) = Command::new("/sbin/ifconfig")
+            .arg(tun_name)
+            .arg("alias")
+            .arg(format!("{}.{}.{}.{}/{}", ip[0], ip[1], ip[2], ip[3], ip[4]))
+            .arg("up")
+            .status()
+        {
+            eprintln!("Failed to add interface address: {:?}", e);
+            exit(1)
+        }
+    };
 }
