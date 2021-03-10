@@ -79,7 +79,7 @@ impl IpList {
         ip: Option<[u8; 5]>,
         static_public: [u8; 32],
     ) -> Result<[u8; 5], WireGuardError> {
-        if ip.is_none() || (ip.is_some() && self.allocated.contains(&ip.unwrap())) {
+        if ip.is_none() || (ip.is_some() && !self.allocated.contains(&ip.unwrap())) {
             if let Some(new_ip) = self.get_ip() {
                 self.peer_ips.insert(static_public, new_ip);
                 self.allocated.insert(new_ip);
