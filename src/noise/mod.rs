@@ -351,17 +351,18 @@ impl Tunn {
     ) -> Result<TunnResult<'a>, WireGuardError> {
         debug!(self.logger, "Received handshake_initiation"; "remote_idx" => p.sender_idx);
 
+        let mut ip = self.assigned_ip.lock();
+
         let (packet, session) = {
             let mut handshake = self.handshake.lock();
             if p.arbitrary_payload.is_some() {
-                let mut ip = self.assigned_ip.lock();
                 if self.ip_list.is_some() {
                     let allocated_ip = self
                         .ip_list
                         .clone()
                         .unwrap()
                         .lock()
-                        .allocate(handshake.get_peer_static_public())?;
+                        .allocate(*ip, handshake.get_peer_static_public())?;
                     *ip = Some(allocated_ip);
                 }
 
