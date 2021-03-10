@@ -60,15 +60,17 @@ impl IpList {
                 return None;
             }
 
+            // Check if this IP is available
             let ip = self.list[self.index.get()];
             if !&allocated.contains(&ip) {
+                // If this IP is not allocated, return it
                 break;
             }
+
             self.index.set(current + 1);
-            current = self.index.get();
         }
 
-        Some(self.list[current - 1])
+        Some(self.list[self.index.get()])
     }
 
     // allocate allocates the IP for the peer and stores the mapping of pubkey -> IP in memory to avoid IP exhaustion
