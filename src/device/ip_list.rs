@@ -74,14 +74,22 @@ impl IpList {
     }
 
     // allocate allocates the IP for the peer and stores the mapping of pubkey -> IP in memory to avoid IP exhaustion
-    pub fn allocate(&mut self, static_public: [u8; 32]) -> Result<[u8; 5], WireGuardError> {
-        if let Some(new_ip) = self.get_ip() {
-            self.peer_ips.insert(static_public, new_ip);
-            self.allocated.insert(new_ip);
-            Ok(new_ip)
-        } else {
-            Err(WireGuardError::IPListExhausted)
+    pub fn allocate(
+        &mut self,
+        ip: Option<[u8; 5]>,
+        static_public: [u8; 32],
+    ) -> Result<[u8; 5], WireGuardError> {
+        if ip.is_none() || (ip.is_some() && self.allocated.contains(&ip.unwrap())) {
+            if let Some(new_ip) = self.get_ip() {
+                self.peer_ips.insert(static_public, new_ip);
+                self.allocated.insert(new_ip);
+                return Ok(new_ip);
+            } else {
+                return Err(WireGuardError::IPListExhausted);
+            }
         }
+
+        Ok(ip.unwrap())
     }
 
     // deallocate removes the IP allocation and pubkey -> IP mapping
