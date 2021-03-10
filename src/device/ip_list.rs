@@ -65,6 +65,7 @@ impl IpList {
                 break;
             }
             self.index.set(current + 1);
+            current = self.index.get();
         }
 
         Some(self.list[current - 1])
