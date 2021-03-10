@@ -83,6 +83,10 @@ impl<S: Sock> Peer<S> {
     }
 
     pub fn populate_endpoints(&self) {
+        if self.tunnel.endpoints.is_none() {
+            return;
+        }
+
         let tunn_lock = self.tunnel.endpoints.as_ref().unwrap().lock();
         let tunn_endpoints = *tunn_lock;
 
