@@ -880,7 +880,8 @@ fn setup_interface(ip: &[u8], tun_name: &str) {
     }
 
     // Set the interface address if provided, additional configuration will be done externally
-    if cfg!(linux) {
+    #[cfg(target_os = "linux")]
+    {
         if let Err(e) = Command::new("/sbin/ip")
             .arg("addr")
             .arg("add")
@@ -892,7 +893,9 @@ fn setup_interface(ip: &[u8], tun_name: &str) {
             eprintln!("Failed to add interface address: {:?}", e);
             exit(1)
         }
-    } else if cfg!(macos) {
+    }
+    #[cfg(target_os = "macos")]
+    {
         //sudo ifconfig en0 alias 128.133.123.83/24 up
         if let Err(e) = Command::new("/sbin/ifconfig")
             .arg(tun_name)
@@ -904,5 +907,5 @@ fn setup_interface(ip: &[u8], tun_name: &str) {
             eprintln!("Failed to add interface address: {:?}", e);
             exit(1)
         }
-    };
+    }
 }
