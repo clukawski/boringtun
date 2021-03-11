@@ -83,8 +83,10 @@ const HANDSHAKE_RESP: MessageType = 2;
 const COOKIE_REPLY: MessageType = 3;
 const DATA: MessageType = 4;
 const HANDSHAKE_INIT_DYNAMIC: MessageType = 5;
+const HANDSHAKE_REINIT: MessageType = 6;
 
 const HANDSHAKE_INIT_SZ: usize = 148;
+const HANDSHAKE_REINIT_SZ: usize = 8;
 const HANDSHAKE_RESP_SZ: usize = 92;
 const COOKIE_REPLY_SZ: usize = 64;
 const DATA_OVERHEAD_SZ: usize = 32;
@@ -121,6 +123,11 @@ pub struct HandshakeInit<'a> {
 }
 
 #[derive(Debug)]
+pub struct HandshakeReInitPacket {
+    pub receiver_idx: u32,
+}
+
+#[derive(Debug)]
 pub struct HandshakeResponse<'a> {
     sender_idx: u32,
     pub receiver_idx: u32,
@@ -146,6 +153,7 @@ pub struct PacketData<'a> {
 // Describes a packet from network
 #[derive(Debug)]
 pub enum Packet<'a> {
+    HandshakeReInit(HandshakeReInitPacket),
     HandshakeInit(HandshakeInit<'a>),
     HandshakeResponse(HandshakeResponse<'a>),
     PacketCookieReply(PacketCookieReply<'a>),
@@ -289,6 +297,7 @@ impl Tunn {
             Packet::HandshakeResponse(p) => self.handle_handshake_response(p, dst),
             Packet::PacketCookieReply(p) => self.handle_cookie_reply(p),
             Packet::PacketData(p) => self.handle_data(p, dst),
+            Packet::HandshakeReInit(p) => self.handle_handshake_reinit(p, dst),
         }
         .unwrap_or_else(TunnResult::from)
     }
@@ -312,6 +321,11 @@ impl Tunn {
                 encrypted_timestamp: &src[88..116],
                 arbitrary_payload: None,
             }),
+            (HANDSHAKE_REINIT, HANDSHAKE_REINIT_SZ) => {
+                Packet::HandshakeReInit(HandshakeReInitPacket {
+                    receiver_idx: u32::from_le_bytes(make_array(&src[4..8])),
+                })
+            }
             // Set the arbitrary data if we have it
             (HANDSHAKE_INIT_DYNAMIC, HANDSHAKE_INIT_SZ) => Packet::HandshakeInit(HandshakeInit {
                 sender_idx: u32::from_le_bytes(make_array(&src[4..8])),
@@ -390,6 +404,20 @@ impl Tunn {
         debug!(self.logger, "Sending handshake_response"; "local_idx" => index);
 
         Ok(TunnResult::WriteToNetwork(packet))
+    }
+
+    fn handle_handshake_reinit<'a>(
+        &self,
+        p: HandshakeReInitPacket,
+        dst: &'a mut [u8],
+    ) -> Result<TunnResult<'a>, WireGuardError> {
+        debug!(self.logger, "Received handshake_reinitiation"; "remote_idx" => p.receiver_idx);
+        Ok(self.format_handshake_initiation(dst, true))
+    }
+
+    pub fn format_handshake_reinit(&self) -> [u8; 8] {
+        debug!(self.logger, "Formatting handshake_reinitiation");
+        self.handshake.lock().format_handshake_reinit()
     }
 
     fn handle_handshake_response<'a>(

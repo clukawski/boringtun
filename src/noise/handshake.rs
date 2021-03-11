@@ -357,6 +357,17 @@ impl Handshake {
         self.params.set_static_private(private_key, public_key)
     }
 
+    pub(super) fn format_handshake_reinit(&mut self) -> [u8; 8] {
+        // TODO: this index stuff is most definitely wrong, figure this stuff out,
+        // see TODOs in device/mod.rs
+        let mut reinit_packet: [u8; super::HANDSHAKE_REINIT_SZ] = [0; 8];
+        let (message_type, rest) = &mut reinit_packet.split_at_mut(4);
+        let (receiver_index, _) = rest.split_at_mut(4);
+        message_type.copy_from_slice(&super::HANDSHAKE_REINIT.to_le_bytes());
+        receiver_index.copy_from_slice(&(1 as u32).to_le_bytes());
+        reinit_packet
+    }
+
     pub(super) fn receive_handshake_initialization<'a>(
         &mut self,
         packet: HandshakeInit,
