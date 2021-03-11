@@ -47,7 +47,7 @@ use std::thread::JoinHandle;
 
 use crate::crypto::x25519::*;
 use crate::noise::errors::*;
-use crate::noise::handshake::parse_handshake_anon;
+use crate::noise::handshake::{parse_handshake_anon, format_handshake_reinit};
 use crate::noise::rate_limiter::RateLimiter;
 use crate::noise::*;
 use allowed_ips::*;
@@ -687,13 +687,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
 
                     if peer.is_none() {
                         if let Packet::PacketData(_) = &parsed_packet {
-                            // TODO: this will pretty much always be the first index but maybe find something
-                            // more robust to get this local peer's struct
-                            let mut reinit_packet: [u8; 8] = [0; 8];
-                            let (message_type, rest) = &mut reinit_packet.split_at_mut(4);
-                            let (receiver_index, _) = rest.split_at_mut(4);
-                            message_type.copy_from_slice(&(6 as u32).to_le_bytes());
-                            receiver_index.copy_from_slice(&(0 as u32).to_le_bytes());
+                            let reinit_packet = format_handshake_reinit();
                             udp.sendto(&reinit_packet, addr);
                             continue;
                         }
