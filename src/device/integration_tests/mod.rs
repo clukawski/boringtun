@@ -282,6 +282,7 @@ mod tests {
                     listen_port: 0,
                     tun_name: None,
                     ip_list: None,
+                    is_dynamic: false,
                 },
             )
         }
@@ -576,6 +577,7 @@ mod tests {
                 listen_port: 0,
                 tun_name: None,
                 ip_list: None,
+                is_dynamic: false,
             },
         );
 
@@ -740,6 +742,7 @@ mod tests {
                 listen_port: 0,
                 tun_name: None,
                 ip_list: None,
+                is_dynamic: false,
             },
         );
 
