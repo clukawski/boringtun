@@ -681,7 +681,7 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             Packet::PacketData(p) => d.peers_by_idx.get(&(p.receiver_idx >> 8)),
                             // TODO: index stuff here is wrong, this is a similar issue as with the TODO
                             // below where we are getting the local peer for the reinit packet
-                            Packet::HandshakeReInit(_) => d.peers_by_idx.get(&(1 as u32)),
+                            Packet::HandshakeReInit(p) => d.peers_by_idx.get(&(p.receiver_idx >> 8)),
                         }
                     };
 
@@ -689,9 +689,11 @@ impl<T: Tun, S: Sock> Device<T, S> {
                         if let Packet::PacketData(_) = &parsed_packet {
                             // TODO: this will pretty much always be the first index but maybe find something
                             // more robust to get this local peer's struct
-                            let self_peer = d.peers_by_idx.get(&(1 as u32));
-                            let reinit_packet =
-                                self_peer.unwrap().clone().tunnel.format_handshake_reinit();
+                            let mut reinit_packet: [u8; 8] = [0; 8];
+                            let (message_type, rest) = &mut reinit_packet.split_at_mut(4);
+                            let (receiver_index, _) = rest.split_at_mut(4);
+                            message_type.copy_from_slice(&(6 as u32).to_le_bytes());
+                            receiver_index.copy_from_slice(&(0 as u32).to_le_bytes());
                             udp.sendto(&reinit_packet, addr);
                             continue;
                         }

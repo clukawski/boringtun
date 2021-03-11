@@ -415,11 +415,6 @@ impl Tunn {
         Ok(self.format_handshake_initiation(dst, true))
     }
 
-    pub fn format_handshake_reinit(&self) -> [u8; 8] {
-        debug!(self.logger, "Formatting handshake_reinitiation");
-        self.handshake.lock().format_handshake_reinit()
-    }
-
     fn handle_handshake_response<'a>(
         &self,
         p: HandshakeResponse,
