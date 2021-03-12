@@ -192,8 +192,8 @@ pub fn format_handshake_reinit() -> [u8; super::HANDSHAKE_REINIT_SZ] {
     let mut reinit_packet: [u8; 8] = [0; 8];
     let (message_type, rest) = &mut reinit_packet.split_at_mut(4);
     let (receiver_index, _) = rest.split_at_mut(4);
-    message_type.copy_from_slice(&(6 as u32).to_le_bytes());
-    receiver_index.copy_from_slice(&(0 as u32).to_le_bytes());
+    message_type.copy_from_slice(&(6_u32).to_le_bytes());
+    receiver_index.copy_from_slice(&(0_u32).to_le_bytes());
     reinit_packet
 }
 

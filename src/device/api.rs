@@ -151,7 +151,7 @@ fn api_get<T: Tun, S: Sock>(writer: &mut BufWriter<&UnixStream>, d: &Device<T, S
         //     writeln!(writer, "endpoint={}", addr);
         // }
 
-        for (_, ip, cidr) in p.allowed_ips() {
+        for (_, ip, cidr) in p.allowed_ips().read().iter() {
             writeln!(writer, "allowed_ip={}/{}", ip, cidr);
         }
 
@@ -188,7 +188,7 @@ fn api_get_json<T: Tun, S: Sock> (writer: &mut BufWriter<&UnixStream>, d: &Devic
             peer["fwmark"] = fwmark.into();
         }
 
-        for (_, ip, _) in p.allowed_ips() {
+        for (_, ip, _) in p.allowed_ips().read().iter() {
             peer["allowed_ip"] = ip.to_string().into();
         }
 

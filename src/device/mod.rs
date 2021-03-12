@@ -32,9 +32,9 @@ pub mod udp;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::convert::From;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::io;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::os::unix::io::AsRawFd;
 use std::process::exit;
 use std::process::Command;
@@ -47,7 +47,7 @@ use std::thread::JoinHandle;
 
 use crate::crypto::x25519::*;
 use crate::noise::errors::*;
-use crate::noise::handshake::{parse_handshake_anon, format_handshake_reinit};
+use crate::noise::handshake::{format_handshake_reinit, parse_handshake_anon};
 use crate::noise::rate_limiter::RateLimiter;
 use crate::noise::*;
 use allowed_ips::*;
@@ -762,11 +762,23 @@ impl<T: Tun, S: Sock> Device<T, S> {
                             // If we have the interface name and this is a dynamic address allocation
                             // handshake response, set up the new interface address
                             if let Some(t) = &d.config.tun_name {
-                                #[cfg(any(target_os = "linux", target_os = "macos"))]
-                                {
-                                    if handshake_resp {
-                                        let tun_aip = peer.tunnel.assigned_ip.lock();
-                                        if let Some(ip) = *tun_aip {
+                                if handshake_resp {
+                                    let tun_aip = peer.tunnel.assigned_ip.lock();
+                                    if let Some(ip) = *tun_aip {
+                                        let mut allowed_ips = vec![AllowedIP {
+                                            addr: IpAddr::V4(Ipv4Addr::new(
+                                                ip[0], ip[1], ip[2], ip[3],
+                                            )),
+                                            cidr: ip[4],
+                                        }];
+                                        for (_, addr, cidr) in peer.allowed_ips().read().iter() {
+                                            allowed_ips.push(AllowedIP {
+                                                addr,
+                                                cidr: cidr.try_into().unwrap(),
+                                            });
+                                        }
+                                        #[cfg(any(target_os = "linux", target_os = "macos"))]
+                                        {
                                             setup_interface(&ip, &t);
                                         }
                                     }

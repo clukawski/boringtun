@@ -21,7 +21,7 @@ pub struct Peer<S: Sock> {
     index: u32,                   // The index the tunnel uses
     endpoint: Arc<RwLock<Endpoint<S>>>,
     endpoints: Arc<RwLock<Vec<Arc<RwLock<Endpoint<S>>>>>>,
-    allowed_ips: AllowedIps<()>,
+    allowed_ips: Arc<RwLock<AllowedIps<()>>>,
     preshared_key: Option<[u8; 32]>,
     pub assigned_ip: Mutex<[u8; 5]>,
 }
@@ -68,7 +68,7 @@ impl<S: Sock> Peer<S> {
                 conn: None,
             })),
             endpoints: Arc::new(RwLock::new(endpoints_vec)),
-            allowed_ips: allowed_ips.iter().collect(),
+            allowed_ips: Arc::new(RwLock::new(allowed_ips.iter().collect())),
             preshared_key,
             assigned_ip: Mutex::new([0, 0, 0, 0, 0]),
         }
@@ -250,11 +250,19 @@ impl<S: Sock> Peer<S> {
     }
 
     pub fn is_allowed_ip<I: Into<IpAddr>>(&self, addr: I) -> bool {
-        self.allowed_ips.find(addr.into()).is_some()
+        let allowed_ips = self.allowed_ips.clone();
+        let allowed_ips_lock = allowed_ips.read();
+        allowed_ips_lock.find(addr.into()).is_some()
     }
 
-    pub fn allowed_ips(&self) -> Iter<()> {
-        self.allowed_ips.iter()
+    pub fn set_allowed_ips(&self, new: &[AllowedIP]) {
+        let allowed_ips = self.allowed_ips.clone();
+        let mut allowed_ips_lock = allowed_ips.write();
+        *allowed_ips_lock = new.iter().collect();
+    }
+
+    pub fn allowed_ips(&self) -> Arc<RwLock<AllowedIps<()>>> {
+        self.allowed_ips.clone()
     }
 
     pub fn time_since_last_handshake(&self) -> Option<std::time::Duration> {
