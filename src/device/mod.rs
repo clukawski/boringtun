@@ -699,10 +699,16 @@ impl<T: Tun, S: Sock> Device<T, S> {
                     };
 
                     let mut handshake_resp = false;
+                    let mut handshake_init = false;
 
                     // Setup network if we have the ip from the handshake response
                     if let Packet::HandshakeResponse(_) = &parsed_packet {
                         handshake_resp = true;
+                    }
+
+                    // If we're getting a handshake init we'll need to know if we have to store an IP
+                    if let Packet::HandshakeInit(_) = &parsed_packet {
+                        handshake_init = true;
                     }
 
                     // We found a peer, use it to decapsulate the message+
@@ -730,6 +736,24 @@ impl<T: Tun, S: Sock> Device<T, S> {
                     };
 
                     if flush {
+                        // If we're flushing, this was a handshake init packet, and dynamic allocation is
+                        // enabled this peer has successfully authenticated and received an assigned IP,
+                        // so update the Peer's AllowedIps
+                        if handshake_init {
+                            if let Some(ip) = peer.get_assigned_ip() {
+                                let mut allowed_ips = vec![AllowedIP {
+                                    addr: IpAddr::V4(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])),
+                                    cidr: ip[4],
+                                }];
+                                for (_, addr, cidr) in peer.allowed_ips().read().iter() {
+                                    allowed_ips.push(AllowedIP {
+                                        addr,
+                                        cidr: cidr.try_into().unwrap(),
+                                    });
+                                }
+                                peer.set_allowed_ips(&allowed_ips);
+                            }
+                        }
                         // Flush pending queue
                         while let TunnResult::WriteToNetwork(packet) =
                             peer.tunnel.decapsulate(None, &[], &mut t.dst_buf[..])
@@ -761,24 +785,12 @@ impl<T: Tun, S: Sock> Device<T, S> {
 
                             // If we have the interface name and this is a dynamic address allocation
                             // handshake response, set up the new interface address
-                            if let Some(t) = &d.config.tun_name {
-                                if handshake_resp {
-                                    let tun_aip = peer.tunnel.assigned_ip.lock();
-                                    if let Some(ip) = *tun_aip {
-                                        let mut allowed_ips = vec![AllowedIP {
-                                            addr: IpAddr::V4(Ipv4Addr::new(
-                                                ip[0], ip[1], ip[2], ip[3],
-                                            )),
-                                            cidr: ip[4],
-                                        }];
-                                        for (_, addr, cidr) in peer.allowed_ips().read().iter() {
-                                            allowed_ips.push(AllowedIP {
-                                                addr,
-                                                cidr: cidr.try_into().unwrap(),
-                                            });
-                                        }
-                                        #[cfg(any(target_os = "linux", target_os = "macos"))]
-                                        {
+                            #[cfg(any(target_os = "linux", target_os = "macos"))]
+                            {
+                                if let Some(t) = &d.config.tun_name {
+                                    if handshake_resp {
+                                        let tun_aip = peer.tunnel.assigned_ip.lock();
+                                        if let Some(ip) = *tun_aip {
                                             setup_interface(&ip, &t);
                                         }
                                     }
